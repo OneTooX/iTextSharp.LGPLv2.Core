@@ -18,6 +18,7 @@ steps:
   displayName: Build
   inputs:
     command: 'build'
+    arguments: '--configuration Release'
 - task: DotNetCoreCLI@2
   displayName: Test
   inputs:
