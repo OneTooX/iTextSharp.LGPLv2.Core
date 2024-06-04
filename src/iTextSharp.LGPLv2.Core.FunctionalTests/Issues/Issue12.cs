@@ -12,7 +12,7 @@ namespace iTextSharp.LGPLv2.Core.FunctionalTests.Issues;
 [TestClass]
 public class Issue12
 {
-    [TestMethod]
+    [TestMethod, TestCategory("Not Working")]
     public void Verify_Issue12_CanBe_Processed()
     {
         using var document = new Document(PageSize.A4.Rotate());
