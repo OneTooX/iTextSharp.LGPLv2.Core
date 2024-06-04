@@ -11,7 +11,6 @@
         <PackageId>OneTooX.iTextSharp</PackageId>
         <PackageTags>PdfReport;Excel;Export;iTextSharp;PDF;Report;Reporting;Persian;.NET Core;aspnetcore</PackageTags>
         <PackageProjectUrl>https://github.com/OneTooX/iTextSharp.LGPLv2.Core</PackageProjectUrl>
-        <PackageLicenseUrl>http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html</PackageLicenseUrl>
         <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
         <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
         <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
@@ -47,7 +46,8 @@
     <ItemGroup>
         <Using Include="System.Globalization"/>
         <Using Include="System.IO"/>
-        <Using Remove="System.Net.Http"/> <!-- for .NET Framework 4.x -->
+        <Using Remove="System.Net.Http"/>
+        <!-- for .NET Framework 4.x -->
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="SkiaSharp" Version="2.88.8"/>
