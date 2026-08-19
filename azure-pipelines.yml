@@ -14,6 +14,15 @@ variables:
     minor: 0
 name: $(major).$(minor).$(Rev:r)
 steps:
+# The project targets net10.0 and global.json pins the SDK exactly, matching upstream.
+# Hosted images lag SDK releases by weeks, so install the pinned version rather than
+# relaxing global.json - that keeps the source identical to VahidN/iTextSharp.LGPLv2.Core
+# and leaves the merge surface at zero.
+- task: UseDotNet@2
+  displayName: Install the SDK global.json asks for
+  inputs:
+    packageType: 'sdk'
+    useGlobalJson: true
 - task: DotNetCoreCLI@2
   displayName: Build
   inputs:
