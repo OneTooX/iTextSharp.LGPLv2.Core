@@ -3,8 +3,15 @@
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 
+# Development happens on release/* branches, as it does across the OneTooX repos; master
+# is behind. Only master was listed here, so every release branch build so far has been
+# queued by hand. The definition takes its CI trigger from this file
+# (settingsSourceType 2, empty branch filter), so this is the only place to set it.
 trigger:
-- master
+  branches:
+    include:
+      - master
+      - release/*
 
 pool:
   vmImage: 'windows-latest'
