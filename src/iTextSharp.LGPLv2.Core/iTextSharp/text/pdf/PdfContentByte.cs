@@ -870,6 +870,15 @@ public class PdfContentByte
         {
             Content.Append(tag.GetBytes()).Append(str: " BMC").Append_i(Separator);
 
+            // BMC opens a marked content sequence that EndMarkedContentSequence has to close, just
+            // as the BDC below does, so the depth has to be counted here too. Without this the
+            // single argument overload - BeginMarkedContentSequence(tag), which passes a null
+            // property - writes BMC and leaves the depth at zero, and the matching
+            // EndMarkedContentSequence throws "Unbalanced begin/end marked content operators".
+            // That made it impossible to mark content as an /Artifact, which PDF/UA requires for
+            // decoration such as overlays. Present in iText 4.1.6 and still in the upstream repo.
+            ++_mcDepth;
+
             return;
         }
 
