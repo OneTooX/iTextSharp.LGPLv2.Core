@@ -1,14 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <Description>iTextSharp.LGPLv2.Core is an unofficial port of the last LGPL version of the iTextSharp (V4.1.6) to .NET Core.</Description>
         <VersionPrefix>3.8.5</VersionPrefix>
-        <Authors>Vahid Nasiri</Authors>
+        <Authors>Vahid Nasiri,Fiftytwo A/S</Authors>
         <TargetFrameworks>net10.0;net9.0;net8.0;net7.0;net6.0;netstandard2.0;net462;</TargetFrameworks>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <AssemblyName>iTextSharp.LGPLv2.Core</AssemblyName>
-        <PackageId>iTextSharp.LGPLv2.Core</PackageId>
+        <PackageId>OneTooX.iTextSharp</PackageId>
         <PackageTags>PdfReport;Excel;Export;iTextSharp;PDF;Report;Reporting;Persian;.NET Core;aspnetcore</PackageTags>
-        <PackageProjectUrl>https://github.com/VahidN/iTextSharp.LGPLv2.Core</PackageProjectUrl>
+        <PackageProjectUrl>https://github.com/OneTooX/iTextSharp.LGPLv2.Core</PackageProjectUrl>
         <PackageLicenseExpression>LGPL-2.0-only</PackageLicenseExpression>
         <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
         <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>

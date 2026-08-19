@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.util;
 using iTextSharp.text.pdf.collection;
 using iTextSharp.text.pdf.intern;
@@ -943,7 +943,10 @@ public class PdfStamperImp : PdfWriter
         AddFieldResources();
         var catalog = Reader.Catalog;
         var pages = (PdfDictionary)PdfReader.GetPdfObject(catalog.Get(PdfName.Pages));
-        pages.Put(PdfName.Itxt, new PdfString(Document.Release));
+        // OneTooX: the iText version is deliberately not stamped into produced
+        // documents. Keep this commented rather than deleted so an upstream merge
+        // conflicts here instead of silently reinstating it.
+        //pages.Put(PdfName.Itxt, new PdfString(Document.Release));
         MarkUsed(pages);
         var acroForm = (PdfDictionary)PdfReader.GetPdfObject(catalog.Get(PdfName.Acroform), Reader.Catalog);
 

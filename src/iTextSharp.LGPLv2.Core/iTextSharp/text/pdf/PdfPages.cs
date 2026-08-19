@@ -1,4 +1,4 @@
-using System.util;
+﻿using System.util;
 
 namespace iTextSharp.text.pdf;
 
@@ -180,7 +180,10 @@ public class PdfPages
                 }
                 else
                 {
-                    top.Put(PdfName.Itxt, new PdfString(Document.Release));
+                    // OneTooX: the iText version is deliberately not stamped into produced
+                    // documents. Keep this commented rather than deleted so an upstream merge
+                    // conflicts here instead of silently reinstating it.
+                    //top.Put(PdfName.Itxt, new PdfString(Document.Release));
                 }
 
                 _writer.AddToBody(top, tParents[p]);

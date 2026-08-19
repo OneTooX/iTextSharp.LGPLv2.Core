@@ -61,7 +61,7 @@ public class MarkedContentTests
         var content = pdfWriter.DirectContent;
         content.BeginMarkedContentSequence(new PdfName("Artifact"));
 
-        Assert.ThrowsException<IllegalPdfSyntaxException>(() => content.SanityCheck());
+        Assert.Throws<IllegalPdfSyntaxException>(() => content.SanityCheck());
     }
 
     /// <summary>The written content stream carries the BMC/EMC pair the structure relies on.</summary>
