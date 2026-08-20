@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.util;
 using iTextSharp.text.html;
 using iTextSharp.text.pdf;
@@ -734,6 +734,27 @@ public sealed class FontFactoryImp
                     return 0;
                 }
 
+                if (scanSubdirectories)
+                {
+                    // Directory.GetFiles returns files only, so the directory test below never fired
+                    // and scanSubdirectories did nothing at all. Java's File.listFiles, which the
+                    // original was ported from, returns both. It matters on Linux, where nothing
+                    // sits directly in /usr/share/fonts: the faces are one or two levels down, in
+                    // truetype/msttcorefonts and the like, so RegisterDirectories registered nothing
+                    // and every lookup fell through to a non-embedded standard-14 font.
+                    foreach (var subdirectory in Directory.GetDirectories(dir))
+                    {
+                        try
+                        {
+                            count += RegisterDirectory(Path.GetFullPath(subdirectory), scanSubdirectories: true);
+                        }
+                        catch
+                        {
+                            //empty on purpose
+                        }
+                    }
+                }
+
                 var files = Directory.GetFiles(dir);
 
                 if (files == null)
@@ -745,40 +766,30 @@ public sealed class FontFactoryImp
                 {
                     try
                     {
-                        if (Directory.Exists(files[k]))
+                        var name = Path.GetFullPath(files[k]);
+
+                        var suffix = name.Length < 4
+                            ? null
+                            : name.Substring(name.Length - 4).ToLower(CultureInfo.InvariantCulture);
+
+                        if (".afm".Equals(suffix, StringComparison.Ordinal) ||
+                            ".pfm".Equals(suffix, StringComparison.Ordinal))
                         {
-                            if (scanSubdirectories)
-                            {
-                                count += RegisterDirectory(Path.GetFullPath(files[k]), scanSubdirectories: true);
-                            }
-                        }
-                        else
-                        {
-                            var name = Path.GetFullPath(files[k]);
+                            /* Only register Type 1 fonts with matching .pfb files */
+                            var pfb = name.Substring(startIndex: 0, name.Length - 4) + ".pfb";
 
-                            var suffix = name.Length < 4
-                                ? null
-                                : name.Substring(name.Length - 4).ToLower(CultureInfo.InvariantCulture);
-
-                            if (".afm".Equals(suffix, StringComparison.Ordinal) ||
-                                ".pfm".Equals(suffix, StringComparison.Ordinal))
-                            {
-                                /* Only register Type 1 fonts with matching .pfb files */
-                                var pfb = name.Substring(startIndex: 0, name.Length - 4) + ".pfb";
-
-                                if (File.Exists(pfb))
-                                {
-                                    Register(name, alias: null);
-                                    ++count;
-                                }
-                            }
-                            else if (".ttf".Equals(suffix, StringComparison.Ordinal) ||
-                                     ".otf".Equals(suffix, StringComparison.Ordinal) ||
-                                     ".ttc".Equals(suffix, StringComparison.Ordinal))
+                            if (File.Exists(pfb))
                             {
                                 Register(name, alias: null);
                                 ++count;
                             }
+                        }
+                        else if (".ttf".Equals(suffix, StringComparison.Ordinal) ||
+                                 ".otf".Equals(suffix, StringComparison.Ordinal) ||
+                                 ".ttc".Equals(suffix, StringComparison.Ordinal))
+                        {
+                            Register(name, alias: null);
+                            ++count;
                         }
                     }
                     catch
