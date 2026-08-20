@@ -61,7 +61,13 @@ public sealed class PdfStructureStamp
     /// <param name="content">the page content to write to, from <c>PdfStamper.GetOverContent</c></param>
     /// <param name="page">the page number the content is going on, one based</param>
     /// <param name="role">the structure type, for instance <c>PdfName.P</c></param>
-    public void Begin(PdfContentByte content, int page, PdfName role)
+    /// <param name="readFirst">
+    ///     Where the element belongs in reading order. Appended by default; pass true for content
+    ///     that is read before what the document already says, such as an address in the envelope
+    ///     window at the top of the first page. The library cannot work this out - it knows where the
+    ///     content is on the page, not what it means - so the caller has to say.
+    /// </param>
+    public void Begin(PdfContentByte content, int page, PdfName role, bool readFirst = false)
     {
         if (content == null)
         {
@@ -79,13 +85,14 @@ public sealed class PdfStructureStamp
         }
 
         var mcid = NextMcid(page);
+        var container = Container(out var containerReference);
         var element = new PdfDictionary(_structElem);
         element.Put(PdfName.S, role);
-        element.Put(PdfName.P, _rootReference);
+        element.Put(PdfName.P, containerReference);
         element.Put(PdfName.Pg, _reader.GetPageOrigRef(page));
         element.Put(PdfName.K, new PdfNumber(mcid));
         var reference = _writer.AddToBody(element).IndirectReference;
-        Attach(reference);
+        Attach(container, reference, readFirst);
         Remember(page, mcid, reference);
 
         var properties = new PdfDictionary();
@@ -136,27 +143,61 @@ public sealed class PdfStructureStamp
         onPage[mcid] = element;
     }
 
-    /// <summary>Hangs a new element off the root, turning a single kid into an array if need be.</summary>
-    private void Attach(PdfIndirectReference element)
+    /// <summary>
+    ///     Where a new element belongs. A tagged document normally hangs everything off one element
+    ///     below the root - /Document, as a rule - and adding a sibling of that rather than a child
+    ///     leaves the page content in two trees that no longer say which comes first. So the single
+    ///     top level element is the container when there is one, and the root itself otherwise.
+    /// </summary>
+    private PdfDictionary Container(out PdfIndirectReference containerReference)
     {
-        var kids = PdfReader.GetPdfObject(_structTreeRoot.Get(PdfName.K));
+        var kids = PdfStructureTreePruner.Children(_structTreeRoot.Get(PdfName.K));
 
-        if (kids is PdfArray array)
+        if (kids.Count == 1 && kids[0] is PrIndirectReference reference &&
+            PdfReader.GetPdfObject(reference) is PdfDictionary only && only.Get(PdfName.S) != null)
         {
-            array.Add(element);
+            containerReference = reference;
+
+            return only;
+        }
+
+        containerReference = _rootReference;
+
+        return _structTreeRoot;
+    }
+
+    /// <summary>Hangs a new element off the container, turning a single kid into an array if need be.</summary>
+    private static void Attach(PdfDictionary container, PdfIndirectReference element, bool readFirst)
+    {
+        if (PdfReader.GetPdfObject(container.Get(PdfName.K)) is PdfArray array)
+        {
+            if (readFirst)
+            {
+                array.Add(index: 0, element);
+            }
+            else
+            {
+                array.Add(element);
+            }
 
             return;
         }
 
         var replacement = new PdfArray();
+        var existing = container.Get(PdfName.K);
 
-        if (kids != null)
+        if (readFirst)
         {
-            replacement.Add(_structTreeRoot.Get(PdfName.K));
+            replacement.Add(element);
+            if (existing != null) replacement.Add(existing);
+        }
+        else
+        {
+            if (existing != null) replacement.Add(existing);
+            replacement.Add(element);
         }
 
-        replacement.Add(element);
-        _structTreeRoot.Put(PdfName.K, replacement);
+        container.Put(PdfName.K, replacement);
     }
 
     /// <summary>

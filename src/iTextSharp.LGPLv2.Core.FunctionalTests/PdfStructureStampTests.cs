@@ -84,6 +84,46 @@ public class PdfStructureStampTests
         Assert.IsFalse(content.Contains("BDC"), message: "an untagged document was given marked content");
     }
 
+
+    /// <summary>
+    /// A tagged document hangs its content off one element below the root, and a stamp that becomes a
+    /// sibling of that leaves two trees with nothing saying which is read first. It has to go inside.
+    /// </summary>
+    [TestMethod]
+    public void Verify_StampedText_GoesInsideTheDocumentElement()
+    {
+        var reader = Stamp(TaggedDocuments.Create(pages: 2), page: 1);
+
+        var kids = TaggedDocuments.StructTreeRoot(reader).GetAsArray(PdfName.K);
+        Assert.AreEqual(expected: 1, kids?.Size ?? 1, message: "the stamp was added beside the document element");
+    }
+
+    /// <summary>
+    /// Reading order is the point of tagging an address: stamped at the top of the page and read out
+    /// last is not an accessible document, however correct the tree looks.
+    /// </summary>
+    [TestMethod]
+    public void Verify_StampedText_CanBePlacedFirstInReadingOrder()
+    {
+        var appended = ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, readFirst: false));
+        var prepended = ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, readFirst: true));
+
+        Assert.AreEqual(expected: 2, appended, message: "an appended stamp should be read after the page's own text");
+        Assert.AreEqual(expected: 0, prepended, message: "a stamp asked to read first is not first");
+    }
+
+    /// <summary>The position of the stamped paragraph among its siblings, by its marked content id.</summary>
+    private static int ParagraphOrder(PdfReader reader)
+    {
+        var paragraphs = TaggedDocuments.ElementsWithRole(reader, PdfName.P);
+        for (var index = 0; index < paragraphs.Count; index++)
+        {
+            if (paragraphs[index].GetAsNumber(PdfName.K)?.IntValue == 1) return index;
+        }
+
+        return -1;
+    }
+
     private static int Paragraphs(PdfReader reader)
     {
         var count = TaggedDocuments.ElementsWithRole(reader, PdfName.P).Count;
@@ -93,7 +133,9 @@ public class PdfStructureStampTests
     }
 
     /// <summary>Stamps one line of tagged text onto the given page, as a caller would.</summary>
-    private static PdfReader Stamp(byte[] document, int page)
+    private static PdfReader Stamp(byte[] document, int page) => Stamp(document, page, readFirst: false);
+
+    private static PdfReader Stamp(byte[] document, int page, bool readFirst)
     {
         using var output = new MemoryStream();
         var reader = new PdfReader(document);
@@ -101,7 +143,7 @@ public class PdfStructureStampTests
         var tagged = new PdfStructureStamp(stamper);
 
         var content = stamper.GetOverContent(page);
-        tagged.Begin(content, page, PdfName.P);
+        tagged.Begin(content, page, PdfName.P, readFirst);
         content.BeginText();
         content.SetFontAndSize(BaseFont.CreateFont(), size: 10);
         content.SetTextMatrix(x: 50, y: 500);
