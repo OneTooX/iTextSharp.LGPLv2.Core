@@ -2569,6 +2569,12 @@ public class PdfReader : IPdfViewerPreferences, IDisposable
         }
 
         pageRefs.SelectPages(pagesToKeep);
+
+        // Before collecting, so the structure elements describing the dropped pages are unreachable
+        // by the time RemoveUnusedObjects looks for them. Leaving them attached is what turns a page
+        // selection into a document full of orphaned tags.
+        PdfStructureTreePruner.Prune(this);
+
         RemoveUnusedObjects();
     }
 
