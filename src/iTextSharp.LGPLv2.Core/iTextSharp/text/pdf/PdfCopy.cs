@@ -1,4 +1,4 @@
-using System.util;
+﻿using System.util;
 
 namespace iTextSharp.text.pdf;
 
@@ -13,6 +13,8 @@ public class PdfCopy : PdfWriter
     ///     Holds value of property rotateContents.
     /// </summary>
     private bool _rotateContents = true;
+
+    private readonly PdfStructureTreeMerger _structure;
 
     protected PdfIndirectReference acroForm;
 
@@ -47,6 +49,7 @@ public class PdfCopy : PdfWriter
         document.AddDocListener(Pdf);
         Pdf.AddWriter(this);
         IndirectMap = new NullValueDictionary<PdfReader, INullValueDictionary<RefKey, IndirectReferences>>();
+        _structure = new PdfStructureTreeMerger(this);
     }
 
     /// <summary>
@@ -101,6 +104,21 @@ public class PdfCopy : PdfWriter
 
         iRef.SetCopied();
         var newPage = CopyDictionary(thePage);
+
+        // The /StructParents that came across is the source document's key and means nothing here.
+        // The merger hands out the key this page has in the assembled document, or null when the
+        // source carried no structure to key.
+        var structParents = _structure.Track(Reader, origRef, pageRef);
+
+        if (structParents == null)
+        {
+            newPage.Remove(PdfName.Structparents);
+        }
+        else
+        {
+            newPage.Put(PdfName.Structparents, structParents);
+        }
+
         Root.AddPage(newPage);
         ++currentPageNumber;
     }
@@ -500,6 +518,21 @@ public class PdfCopy : PdfWriter
         else
         {
             addFieldResources(theCat);
+        }
+
+        // Late on purpose: the structure tree needs every page placed before it knows which elements
+        // are worth keeping and what /ParentTree looks like. The XMP packet is picked up here too,
+        // because PdfWriter writes it out just after asking for the catalog.
+        _structure.Build(theCat);
+
+        if (xmpMetadata == null)
+        {
+            xmpMetadata = _structure.XmpMetadata;
+        }
+
+        if (_structure.Title != null && Info.Get(PdfName.Title) == null)
+        {
+            Info.Put(PdfName.Title, _structure.Title);
         }
 
         return theCat;

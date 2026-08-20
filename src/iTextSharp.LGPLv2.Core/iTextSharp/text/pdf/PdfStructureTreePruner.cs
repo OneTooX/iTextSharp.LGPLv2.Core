@@ -249,7 +249,7 @@ internal static class PdfStructureTreePruner
         element.Get(PdfName.Pg) is PrIndirectReference page ? page.Number : inherited;
 
     /// <summary>/K is one object, an array of them, or absent. This makes all three one shape.</summary>
-    private static IList<PdfObject> Children(PdfObject kids)
+    internal static IList<PdfObject> Children(PdfObject kids)
     {
         if (kids == null)
         {

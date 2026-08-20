@@ -20,23 +20,23 @@ public class SelectPagesStructureTests
     [TestMethod]
     public void Verify_SelectPages_KeepsTheStructureOfTheKeptPage()
     {
-        var reader = SelectFrom(TaggedDocument(), pagesToKeep: new[] { 1 });
+        var reader = SelectFrom(TaggedDocuments.Create(PagesInFixture), pagesToKeep: new[] { 1 });
 
         Assert.AreEqual(expected: 1, reader.NumberOfPages);
         var structTreeRoot = reader.Catalog.GetAsDict(PdfName.Structtreeroot);
         Assert.IsNotNull(structTreeRoot, message: "the structure tree was lost");
-        Assert.AreEqual(expected: 1, Paragraphs(reader).Count, message: "the kept page lost its paragraph");
+        Assert.AreEqual(expected: 1, ParagraphsOf(reader).Count, message: "the kept page lost its paragraph");
     }
 
     [TestMethod]
     public void Verify_SelectPages_DropsTheStructureOfTheRemovedPages()
     {
-        var whole = new PdfReader(TaggedDocument());
-        Assert.AreEqual(PagesInFixture, Paragraphs(whole).Count, message: "the fixture is not what the test assumes");
+        var whole = new PdfReader(TaggedDocuments.Create(PagesInFixture));
+        Assert.AreEqual(PagesInFixture, ParagraphsOf(whole).Count, message: "the fixture is not what the test assumes");
 
-        var reader = SelectFrom(TaggedDocument(), pagesToKeep: new[] { 2 });
+        var reader = SelectFrom(TaggedDocuments.Create(PagesInFixture), pagesToKeep: new[] { 2 });
 
-        Assert.AreEqual(expected: 1, Paragraphs(reader).Count,
+        Assert.AreEqual(expected: 1, ParagraphsOf(reader).Count,
             message: "the elements of the dropped pages are still in the tree");
     }
 
@@ -47,7 +47,7 @@ public class SelectPagesStructureTests
     [TestMethod]
     public void Verify_SelectPages_LeavesNoTagPointingAtADroppedPage()
     {
-        var reader = SelectFrom(TaggedDocument(), pagesToKeep: new[] { 3 });
+        var reader = SelectFrom(TaggedDocuments.Create(PagesInFixture), pagesToKeep: new[] { 3 });
 
         var pages = new HashSet<int>();
 
@@ -56,7 +56,7 @@ public class SelectPagesStructureTests
             pages.Add(reader.GetPageOrigRef(page).Number);
         }
 
-        foreach (var paragraph in Paragraphs(reader))
+        foreach (var paragraph in ParagraphsOf(reader))
         {
             var owned = paragraph.Get(PdfName.Pg) as PrIndirectReference;
             Assert.IsNotNull(owned, message: "a structure element lost its page reference");
@@ -71,7 +71,7 @@ public class SelectPagesStructureTests
     [TestMethod]
     public void Verify_SelectPages_RenumbersStructParentsToMatchTheParentTree()
     {
-        var reader = SelectFrom(TaggedDocument(), pagesToKeep: new[] { 2, 3 });
+        var reader = SelectFrom(TaggedDocuments.Create(PagesInFixture), pagesToKeep: new[] { 2, 3 });
 
         var structTreeRoot = reader.Catalog.GetAsDict(PdfName.Structtreeroot);
         var nums = structTreeRoot.GetAsDict(PdfName.Parenttree).GetAsArray(PdfName.Nums);
@@ -101,7 +101,7 @@ public class SelectPagesStructureTests
     [TestMethod]
     public void Verify_SelectPages_LeavesAnUntaggedDocumentAlone()
     {
-        var reader = SelectFrom(UntaggedDocument(), pagesToKeep: new[] { 1 });
+        var reader = SelectFrom(TaggedDocuments.Untagged(PagesInFixture), pagesToKeep: new[] { 1 });
 
         Assert.AreEqual(expected: 1, reader.NumberOfPages);
         Assert.IsNull(reader.Catalog.Get(PdfName.Structtreeroot), message: "a structure tree appeared from nowhere");
@@ -122,114 +122,6 @@ public class SelectPagesStructureTests
         return new PdfReader(output.ToArray());
     }
 
-    /// <summary>Every /P below the root, which is one per page in the fixture.</summary>
-    private static List<PdfDictionary> Paragraphs(PdfReader reader)
-    {
-        var found = new List<PdfDictionary>();
-        var structTreeRoot = reader.Catalog.GetAsDict(PdfName.Structtreeroot);
-
-        if (structTreeRoot == null)
-        {
-            return found;
-        }
-
-        Walk(structTreeRoot.Get(PdfName.K), found);
-
-        return found;
-    }
-
-    private static void Walk(PdfObject node, List<PdfDictionary> found)
-    {
-        if (PdfReader.GetPdfObject(node) is PdfArray array)
-        {
-            foreach (var kid in array.ArrayList)
-            {
-                Walk(kid, found);
-            }
-
-            return;
-        }
-
-        if (PdfReader.GetPdfObject(node) is not PdfDictionary element)
-        {
-            return;
-        }
-
-        if (PdfName.P.Equals(element.Get(PdfName.S)))
-        {
-            found.Add(element);
-        }
-
-        if (element.Get(PdfName.K) != null)
-        {
-            Walk(element.Get(PdfName.K), found);
-        }
-    }
-
-    /// <summary>
-    ///     A tagged document with one paragraph per page, each holding one marked content sequence,
-    ///     which is the smallest thing that can show the difference between a pruned tree and one
-    ///     left describing pages that are gone.
-    /// </summary>
-    private static byte[] TaggedDocument()
-    {
-        using var output = new MemoryStream();
-
-        using (var document = new Document(PageSize.A4))
-        {
-            var writer = PdfWriter.GetInstance(document, output);
-            writer.CloseStream = false;
-            writer.SetTagged();
-            document.AddAuthor(TestUtils.Author);
-            document.Open();
-
-            var root = new PdfStructureElement(writer.StructureTreeRoot, new PdfName(name: "Document"));
-            var font = BaseFont.CreateFont();
-
-            for (var page = 1; page <= PagesInFixture; page++)
-            {
-                var paragraph = new PdfStructureElement(root, PdfName.P);
-                var content = writer.DirectContent;
-                content.BeginMarkedContentSequence(paragraph);
-                content.BeginText();
-                content.SetFontAndSize(font, size: 12);
-                content.SetTextMatrix(x: 50, y: 700);
-                content.ShowText($"Page {page}");
-                content.EndText();
-                content.EndMarkedContentSequence();
-
-                if (page < PagesInFixture)
-                {
-                    writer.PageEmpty = false;
-                    document.NewPage();
-                }
-            }
-        }
-
-        return output.ToArray();
-    }
-
-    private static byte[] UntaggedDocument()
-    {
-        using var output = new MemoryStream();
-
-        using (var document = new Document(PageSize.A4))
-        {
-            var writer = PdfWriter.GetInstance(document, output);
-            writer.CloseStream = false;
-            document.Open();
-
-            for (var page = 1; page <= PagesInFixture; page++)
-            {
-                document.Add(new Paragraph($"Page {page}"));
-
-                if (page < PagesInFixture)
-                {
-                    document.NewPage();
-                }
-            }
-        }
-
-        return output.ToArray();
-    }
+    private static List<PdfDictionary> ParagraphsOf(PdfReader reader) =>
+        TaggedDocuments.ElementsWithRole(reader, PdfName.P);
 }
