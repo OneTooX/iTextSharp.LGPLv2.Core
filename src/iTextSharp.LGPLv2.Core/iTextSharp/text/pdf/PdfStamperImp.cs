@@ -1046,7 +1046,14 @@ public class PdfStamperImp : PdfWriter
 
         if (oldInfo != null && oldInfo.Get(PdfName.Producer) != null)
         {
-            producer = oldInfo.GetAsString(PdfName.Producer).ToString();
+            // ToUnicodeString, not ToString: a string read from the file carries no encoding, so
+            // ToString returns its bytes mapped one to one onto chars. For the UTF-16BE producer
+            // Word writes whenever the name holds a non ASCII character that is the byte order
+            // mark followed by NUL interleaved text, and the NULs are dropped again when the
+            // result is written back as PDFDocEncoding below - leaving a BOM in front of single
+            // byte text, which every reader then decodes as CJK. ToUnicodeString detects the BOM
+            // and decodes properly.
+            producer = oldInfo.GetAsString(PdfName.Producer).ToUnicodeString();
         }
 
         if (producer == null)
@@ -1237,7 +1244,10 @@ public class PdfStamperImp : PdfWriter
         }
 
         newInfo.Put(PdfName.Moddate, date);
-        newInfo.Put(PdfName.Producer, new PdfString(producer));
+
+        // TEXT_UNICODE so a producer outside PDFDocEncoding survives. PdfString.GetBytes still
+        // writes plain PDFDocEncoding when the value fits it, so the common case is unchanged.
+        newInfo.Put(PdfName.Producer, new PdfString(producer, PdfObject.TEXT_UNICODE));
 
         if (Append)
         {
