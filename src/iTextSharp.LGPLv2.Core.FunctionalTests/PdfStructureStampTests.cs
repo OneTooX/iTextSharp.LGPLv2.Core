@@ -132,6 +132,22 @@ public class PdfStructureStampTests
             message: "a stamp with no position should be appended");
     }
 
+    /// <summary>
+    ///     An element whose content is an image is placed by where the image is, which comes from the
+    ///     transformation in force and not from the text matrix. The matrix was only reset at BT, so
+    ///     a figure drawn after a text object was placed by the last line of that text - here it
+    ///     would have put the figure a hundred times off the page and left the stamp below it.
+    /// </summary>
+    [TestMethod]
+    public void Verify_AFigureDrawnAfterText_IsPlacedByTheImageAndNotTheTextMatrix()
+    {
+        var reader = Stamp(TaggedDocuments.TextThenFigure(), page: 1, top: 550f);
+
+        var order = TaggedDocuments.RolesInOrder(reader);
+        CollectionAssert.AreEqual(new[] { "/P", "/P", "/Figure" }, order,
+            message: "the stamp belongs between the text above it and the figure below it, got " + string.Join(", ", order));
+    }
+
     /// <summary>The position of the stamped paragraph among its siblings, by its marked content id.</summary>
     private static int ParagraphOrder(PdfReader reader)
     {

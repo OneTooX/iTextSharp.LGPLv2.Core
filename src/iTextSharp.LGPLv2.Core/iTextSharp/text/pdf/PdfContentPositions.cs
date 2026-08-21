@@ -71,6 +71,9 @@ internal static class PdfContentPositions
 
                         break;
                     case "BT":
+                    case "ET":
+                        // Reset on the way out as well, or a matrix left over from the last line
+                        // places an image drawn afterwards.
                         textMatrix = lineMatrix = Identity;
 
                         break;
@@ -100,15 +103,20 @@ internal static class PdfContentPositions
                     case "'":
                     case "\"":
                         lineMatrix = textMatrix = Multiply(Translation(tx: 0, -leading), lineMatrix);
-                        Record(found, marked, textMatrix, ctm);
+                        Record(found, marked, Multiply(textMatrix, ctm)[5]);
 
                         break;
                     case "Tj":
                     case "TJ":
+                        Record(found, marked, Multiply(textMatrix, ctm)[5]);
+
+                        break;
                     case "Do":
                     case "sh":
                     case "EI":
-                        Record(found, marked, textMatrix, ctm);
+                        // Not text: an XObject, a shading or an inline image is placed by the
+                        // current transformation alone, and the text matrix says nothing about it.
+                        Record(found, marked, ctm[5]);
 
                         break;
                     case "BMC":
@@ -139,7 +147,7 @@ internal static class PdfContentPositions
     ///     Notes the position against the innermost sequence that has an id, and only the first time:
     ///     a sequence begins where its first content is, not where its last is.
     /// </summary>
-    private static void Record(Dictionary<int, float> found, Stack<int> marked, float[] textMatrix, float[] ctm)
+    private static void Record(Dictionary<int, float> found, Stack<int> marked, float y)
     {
         foreach (var mcid in marked)
         {
@@ -150,7 +158,7 @@ internal static class PdfContentPositions
 
             if (!found.ContainsKey(mcid))
             {
-                found[mcid] = Multiply(textMatrix, ctm)[5];
+                found[mcid] = y;
             }
 
             return;
