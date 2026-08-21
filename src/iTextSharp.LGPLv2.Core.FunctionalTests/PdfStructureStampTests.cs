@@ -99,17 +99,37 @@ public class PdfStructureStampTests
     }
 
     /// <summary>
-    /// Reading order is the point of tagging an address: stamped at the top of the page and read out
-    /// last is not an accessible document, however correct the tree looks.
+    ///     Reading order is the point of tagging an address: stamped at the top of the page and read
+    ///     out last is not an accessible document, however correct the tree looks. The fixture puts
+    ///     one paragraph on each page at y 700, so a stamp above that reads before it and one below
+    ///     reads after it.
     /// </summary>
     [TestMethod]
-    public void Verify_StampedText_CanBePlacedFirstInReadingOrder()
+    public void Verify_StampedText_IsPlacedByWhereItIsDrawn()
     {
-        var appended = ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, readFirst: false));
-        var prepended = ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, readFirst: true));
+        Assert.AreEqual(expected: 0, ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, top: 750f)),
+            message: "a stamp above the page's own text should be read before it");
+        Assert.AreEqual(expected: 1, ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, top: 650f)),
+            message: "a stamp below the page's own text should be read after it");
+    }
 
-        Assert.AreEqual(expected: 2, appended, message: "an appended stamp should be read after the page's own text");
-        Assert.AreEqual(expected: 0, prepended, message: "a stamp asked to read first is not first");
+    /// <summary>A stamp belongs on its own page, however high up it sits.</summary>
+    [TestMethod]
+    public void Verify_StampedText_StaysOnItsOwnPage()
+    {
+        Assert.AreEqual(expected: 1, ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 2, top: 750f)),
+            message: "a stamp at the top of page two was read before page one");
+    }
+
+    /// <summary>
+    ///     What every insert used to do, and still does when the caller cannot say where the content
+    ///     is: read after the whole document.
+    /// </summary>
+    [TestMethod]
+    public void Verify_StampedText_WithNoPosition_IsAppended()
+    {
+        Assert.AreEqual(expected: 2, ParagraphOrder(Stamp(TaggedDocuments.Create(pages: 2), page: 1, top: null)),
+            message: "a stamp with no position should be appended");
     }
 
     /// <summary>The position of the stamped paragraph among its siblings, by its marked content id.</summary>
@@ -133,9 +153,9 @@ public class PdfStructureStampTests
     }
 
     /// <summary>Stamps one line of tagged text onto the given page, as a caller would.</summary>
-    private static PdfReader Stamp(byte[] document, int page) => Stamp(document, page, readFirst: false);
+    private static PdfReader Stamp(byte[] document, int page) => Stamp(document, page, top: null);
 
-    private static PdfReader Stamp(byte[] document, int page, bool readFirst)
+    private static PdfReader Stamp(byte[] document, int page, float? top)
     {
         using var output = new MemoryStream();
         var reader = new PdfReader(document);
@@ -143,10 +163,10 @@ public class PdfStructureStampTests
         var tagged = new PdfStructureStamp(stamper);
 
         var content = stamper.GetOverContent(page);
-        tagged.Begin(content, page, PdfName.P, readFirst);
+        tagged.Begin(content, page, PdfName.P, top);
         content.BeginText();
         content.SetFontAndSize(BaseFont.CreateFont(), size: 10);
-        content.SetTextMatrix(x: 50, y: 500);
+        content.SetTextMatrix(x: 50, top ?? 500f);
         content.ShowText("Stamped");
         content.EndText();
         tagged.End(content);

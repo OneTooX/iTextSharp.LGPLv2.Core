@@ -1,4 +1,6 @@
-﻿namespace iTextSharp.text.pdf;
+﻿using System.util;
+
+namespace iTextSharp.text.pdf;
 
 /// <summary>
 ///     Adds tagged content to a document that is already tagged, through a <see cref="PdfStamper" />.
@@ -17,6 +19,16 @@
 ///         be called before the stamper is closed.
 ///     </para>
 ///     <para>
+///         Where the element lands in the tree is the reading order, and appending is almost always
+///         wrong: content stamped into the top of the first page - a letterhead, an address, a
+///         subject line - was announced after the whole document. So <see cref="Begin" /> takes the
+///         y the content is drawn at and places the element among the ones already there, page
+///         ascending and then top to bottom, using <see cref="PdfContentPositions" /> to find where
+///         those sit on their pages. That is an assumption about the document: a single column read
+///         downwards. It holds for letters, and it is the only ordering derivable from the page
+///         itself. Callers that pass no y still append.
+///     </para>
+///     <para>
 ///         Only real content belongs here. Decoration - a line, a cross, an overlay - is an artifact
 ///         rather than a tag, and goes in <c>BeginMarkedContentSequence(new PdfName("Artifact"))</c>
 ///         instead.
@@ -26,13 +38,20 @@ public sealed class PdfStructureStamp
 {
     private static readonly byte[] _mcidToken = { (byte)'/', (byte)'M', (byte)'C', (byte)'I', (byte)'D' };
     private static readonly PdfName _structElem = new(name: "StructElem");
+    private static readonly PdfName _mcr = new(name: "MCR");
+    private static readonly PdfName _objr = new(name: "OBJR");
 
     private readonly Dictionary<int, Dictionary<int, PdfIndirectReference>> _added = new();
     private readonly Dictionary<int, int> _nextMcid = new();
+    private readonly Dictionary<int, int> _pageByObjectNumber = new();
+    private readonly List<Placement> _placements = new();
+    private readonly Dictionary<int, Dictionary<int, float>> _positions = new();
     private readonly PdfReader _reader;
     private readonly PdfIndirectReference _rootReference;
     private readonly PdfDictionary _structTreeRoot;
     private readonly PdfWriter _writer;
+    private PdfArray _containerKids;
+    private PdfIndirectReference _containerReference;
 
     public PdfStructureStamp(PdfStamper stamper)
     {
@@ -61,13 +80,12 @@ public sealed class PdfStructureStamp
     /// <param name="content">the page content to write to, from <c>PdfStamper.GetOverContent</c></param>
     /// <param name="page">the page number the content is going on, one based</param>
     /// <param name="role">the structure type, for instance <c>PdfName.P</c></param>
-    /// <param name="readFirst">
-    ///     Where the element belongs in reading order. Appended by default; pass true for content
-    ///     that is read before what the document already says, such as an address in the envelope
-    ///     window at the top of the first page. The library cannot work this out - it knows where the
-    ///     content is on the page, not what it means - so the caller has to say.
+    /// <param name="top">
+    ///     The y the content is drawn at, in default user space, which is what places the element in
+    ///     reading order. Leave it out only when the position is genuinely unknown; the element is
+    ///     then appended, and is read after everything the document already says.
     /// </param>
-    public void Begin(PdfContentByte content, int page, PdfName role, bool readFirst = false)
+    public void Begin(PdfContentByte content, int page, PdfName role, float? top = null)
     {
         if (content == null)
         {
@@ -85,14 +103,14 @@ public sealed class PdfStructureStamp
         }
 
         var mcid = NextMcid(page);
-        var container = Container(out var containerReference);
+        EnsureContainer();
         var element = new PdfDictionary(_structElem);
         element.Put(PdfName.S, role);
-        element.Put(PdfName.P, containerReference);
+        element.Put(PdfName.P, _containerReference);
         element.Put(PdfName.Pg, _reader.GetPageOrigRef(page));
         element.Put(PdfName.K, new PdfNumber(mcid));
         var reference = _writer.AddToBody(element).IndirectReference;
-        Attach(container, reference, readFirst);
+        Attach(reference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
         Remember(page, mcid, reference);
 
         var properties = new PdfDictionary();
@@ -144,60 +162,189 @@ public sealed class PdfStructureStamp
     }
 
     /// <summary>
-    ///     Where a new element belongs. A tagged document normally hangs everything off one element
-    ///     below the root - /Document, as a rule - and adding a sibling of that rather than a child
-    ///     leaves the page content in two trees that no longer say which comes first. So the single
-    ///     top level element is the container when there is one, and the root itself otherwise.
+    ///     Resolves the container once and works out where everything already in it sits on the page.
     /// </summary>
-    private PdfDictionary Container(out PdfIndirectReference containerReference)
+    /// <remarks>
+    ///     A tagged document normally hangs everything off one element below the root - /Document, as
+    ///     a rule - and adding a sibling of that rather than a child leaves the page content in two
+    ///     trees that no longer say which comes first. So the single top level element is the
+    ///     container when there is one, and the root itself otherwise. Its /K is normalised to an
+    ///     array here so that later insertions are a matter of index.
+    /// </remarks>
+    private void EnsureContainer()
     {
+        if (_containerKids != null)
+        {
+            return;
+        }
+
         var kids = PdfStructureTreePruner.Children(_structTreeRoot.Get(PdfName.K));
+        PdfDictionary container;
 
         if (kids.Count == 1 && kids[0] is PrIndirectReference reference &&
             PdfReader.GetPdfObject(reference) is PdfDictionary only && only.Get(PdfName.S) != null)
         {
-            containerReference = reference;
-
-            return only;
-        }
-
-        containerReference = _rootReference;
-
-        return _structTreeRoot;
-    }
-
-    /// <summary>Hangs a new element off the container, turning a single kid into an array if need be.</summary>
-    private static void Attach(PdfDictionary container, PdfIndirectReference element, bool readFirst)
-    {
-        if (PdfReader.GetPdfObject(container.Get(PdfName.K)) is PdfArray array)
-        {
-            if (readFirst)
-            {
-                array.Add(index: 0, element);
-            }
-            else
-            {
-                array.Add(element);
-            }
-
-            return;
-        }
-
-        var replacement = new PdfArray();
-        var existing = container.Get(PdfName.K);
-
-        if (readFirst)
-        {
-            replacement.Add(element);
-            if (existing != null) replacement.Add(existing);
+            container = only;
+            _containerReference = reference;
         }
         else
         {
-            if (existing != null) replacement.Add(existing);
-            replacement.Add(element);
+            container = _structTreeRoot;
+            _containerReference = _rootReference;
         }
 
-        container.Put(PdfName.K, replacement);
+        for (var page = 1; page <= _reader.NumberOfPages; page++)
+        {
+            var pageReference = _reader.GetPageOrigRef(page);
+
+            if (pageReference != null)
+            {
+                _pageByObjectNumber[pageReference.Number] = page;
+            }
+        }
+
+        _containerKids = PdfReader.GetPdfObject(container.Get(PdfName.K)) as PdfArray;
+
+        if (_containerKids == null)
+        {
+            _containerKids = new PdfArray();
+            var existing = container.Get(PdfName.K);
+
+            if (existing != null)
+            {
+                _containerKids.Add(existing);
+            }
+
+            container.Put(PdfName.K, _containerKids);
+        }
+
+        var previous = Placement.First;
+
+        foreach (var kid in _containerKids.ArrayList)
+        {
+            previous = PlacementOf(kid, previous);
+            _placements.Add(previous);
+        }
+    }
+
+    /// <summary>
+    ///     Hangs the element off the container at the point <paramref name="placement" /> asks for.
+    ///     An element that could not be placed keeps the position of the one before it, so a tree
+    ///     this cannot read stays in the order it arrived in.
+    /// </summary>
+    private void Attach(PdfIndirectReference element, Placement placement)
+    {
+        var index = _containerKids.Size;
+
+        for (var candidate = 0; candidate < _placements.Count; candidate++)
+        {
+            if (_placements[candidate].CompareTo(placement) > 0)
+            {
+                index = candidate;
+
+                break;
+            }
+        }
+
+        _containerKids.Add(index, element);
+        _placements.Insert(index, placement);
+    }
+
+    /// <summary>
+    ///     Where a kid of the container starts on its page: the first page and marked content id
+    ///     found below it, looked up in that page's content. Falls back to
+    ///     <paramref name="previous" /> when there is nothing to go on - an element drawing only
+    ///     inside a form XObject, say - which keeps it next to its neighbour.
+    /// </summary>
+    private Placement PlacementOf(PdfObject kid, Placement previous)
+    {
+        var page = 0;
+        var mcid = -1;
+
+        if (!Locate(kid, ref page, ref mcid, depth: 0) || page == 0)
+        {
+            return previous;
+        }
+
+        return PositionsFor(page).TryGetValue(mcid, out var y) ? new Placement(page, y) : previous;
+    }
+
+    /// <summary>
+    ///     Depth first search for the first marked content the element covers, and the page it is on.
+    ///     Both /K forms are followed: a bare id, which takes its page from the nearest /Pg above it,
+    ///     and an /MCR, which carries its own.
+    /// </summary>
+    private bool Locate(PdfObject node, ref int page, ref int mcid, int depth)
+    {
+        // The tree is a tree, but a damaged one need not be, and this must not be what hangs.
+        if (depth > 64)
+        {
+            return false;
+        }
+
+        var resolved = PdfReader.GetPdfObject(node);
+
+        if (resolved is PdfNumber number)
+        {
+            mcid = number.IntValue;
+
+            return page != 0;
+        }
+
+        if (resolved is not PdfDictionary dictionary)
+        {
+            return false;
+        }
+
+        if (dictionary.Get(PdfName.Pg) is PrIndirectReference pageReference &&
+            _pageByObjectNumber.TryGetValue(pageReference.Number, out var pageNumber))
+        {
+            page = pageNumber;
+        }
+
+        var type = dictionary.Get(PdfName.TYPE);
+
+        if (_objr.Equals(type))
+        {
+            return false;
+        }
+
+        if (_mcr.Equals(type))
+        {
+            if (dictionary.Get(PdfName.Mcid) is not PdfNumber id)
+            {
+                return false;
+            }
+
+            mcid = id.IntValue;
+
+            return page != 0;
+        }
+
+        foreach (var child in PdfStructureTreePruner.Children(dictionary.Get(PdfName.K)))
+        {
+            var childPage = page;
+
+            if (Locate(child, ref childPage, ref mcid, depth + 1))
+            {
+                page = childPage;
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Dictionary<int, float> PositionsFor(int page)
+    {
+        if (!_positions.TryGetValue(page, out var onPage))
+        {
+            onPage = PdfContentPositions.FirstY(_reader.GetPageContent(page));
+            _positions[page] = onPage;
+        }
+
+        return onPage;
     }
 
     /// <summary>
@@ -267,5 +414,32 @@ public sealed class PdfStructureStamp
         }
 
         return true;
+    }
+
+    /// <summary>A point in reading order: which page, and how far down it.</summary>
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Auto)]
+    private readonly struct Placement : IComparable<Placement>, IEquatable<Placement>
+    {
+        public static readonly Placement First = new(page: 0, float.MaxValue);
+        public static readonly Placement Last = new(int.MaxValue, float.MinValue);
+
+        private readonly int _page;
+        private readonly float _y;
+
+        public Placement(int page, float y)
+        {
+            _page = page;
+            _y = y;
+        }
+
+        /// <summary>Pages in order, and within a page the higher up the earlier.</summary>
+        public int CompareTo(Placement other) =>
+            _page != other._page ? _page.CompareTo(other._page) : other._y.CompareTo(_y);
+
+        public bool Equals(Placement other) => _page == other._page && _y.ApproxEquals(other._y);
+
+        public override bool Equals(object obj) => obj is Placement other && Equals(other);
+
+        public override int GetHashCode() => _page;
     }
 }
