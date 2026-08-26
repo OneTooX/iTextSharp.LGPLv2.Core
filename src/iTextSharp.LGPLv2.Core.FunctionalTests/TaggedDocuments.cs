@@ -99,6 +99,27 @@ internal static class TaggedDocuments
         Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABc3UBGAAAAABJRU5ErkJggg==");
 
+    /// <summary>One untagged page with an image on it: content nothing describes, and nothing should.</summary>
+    public static byte[] UntaggedFigure()
+    {
+        using var output = new MemoryStream();
+
+        using (var document = new Document(PageSize.A4))
+        {
+            var writer = PdfWriter.GetInstance(document, output);
+            writer.CloseStream = false;
+            document.Open();
+
+            var image = Image.GetInstance(Png());
+            image.ScaleAbsolute(100f, 100f);
+            image.SetAbsolutePosition(50f, 400f);
+            writer.DirectContent.AddImage(image);
+            writer.PageEmpty = false;
+        }
+
+        return output.ToArray();
+    }
+
     public static byte[] Untagged(int pages)
     {
         using var output = new MemoryStream();
