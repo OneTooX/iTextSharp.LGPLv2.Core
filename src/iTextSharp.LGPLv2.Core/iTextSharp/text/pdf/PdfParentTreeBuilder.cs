@@ -27,8 +27,14 @@ internal static class PdfParentTreeBuilder
     ///     number and marked content id. The walk cannot find these: their references belong to the
     ///     writer, and asking the reader to resolve one gets nothing back.
     /// </param>
+    /// <param name="addedAnnotations">
+    ///     Annotations written through the writer, by the element that holds them. The walk cannot
+    ///     find these for the same reason, and the key goes onto the annotation itself, which the
+    ///     caller still has in hand.
+    /// </param>
     public static void Rebuild(PdfReader reader,
-        Dictionary<int, Dictionary<int, PdfIndirectReference>> added = null)
+        Dictionary<int, Dictionary<int, PdfIndirectReference>> added = null,
+        Dictionary<PdfDictionary, PdfIndirectReference> addedAnnotations = null)
     {
         if (reader == null)
         {
@@ -61,7 +67,7 @@ internal static class PdfParentTreeBuilder
             }
         }
 
-        Write(reader, structTreeRoot, owners, annotations);
+        Write(reader, structTreeRoot, owners, annotations, addedAnnotations);
     }
 
     /// <summary>Walks the tree noting which element owns each marked content id on each page.</summary>
@@ -144,7 +150,8 @@ internal static class PdfParentTreeBuilder
 
     private static void Write(PdfReader reader, PdfDictionary structTreeRoot,
         Dictionary<int, Dictionary<int, PdfIndirectReference>> owners,
-        Dictionary<int, PdfIndirectReference> annotations)
+        Dictionary<int, PdfIndirectReference> annotations,
+        Dictionary<PdfDictionary, PdfIndirectReference> addedAnnotations)
     {
         var nums = new PdfArray();
         var key = 0;
@@ -173,6 +180,7 @@ internal static class PdfParentTreeBuilder
         }
 
         key = WriteAnnotations(reader, nums, annotations, key);
+        key = WriteAddedAnnotations(nums, addedAnnotations, key);
 
         var parentTree = structTreeRoot.GetAsDict(PdfName.Parenttree);
 
@@ -254,6 +262,30 @@ internal static class PdfParentTreeBuilder
         }
 
         return entries;
+    }
+
+    /// <summary>
+    ///     Writes the entries for annotations the writer holds. They are not on a page the reader can
+    ///     be asked about yet, so the key is put straight onto the dictionary the caller is still
+    ///     holding, before it goes to the body.
+    /// </summary>
+    private static int WriteAddedAnnotations(PdfArray nums,
+        Dictionary<PdfDictionary, PdfIndirectReference> annotations, int key)
+    {
+        if (annotations == null)
+        {
+            return key;
+        }
+
+        foreach (var annotation in annotations)
+        {
+            nums.Add(new PdfNumber(key));
+            nums.Add(annotation.Value);
+            annotation.Key.Put(PdfName.Structparent, new PdfNumber(key));
+            key++;
+        }
+
+        return key;
     }
 
     private static int? PageOf(PdfDictionary element, int? inherited) =>

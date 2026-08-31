@@ -42,6 +42,7 @@ public sealed class PdfStructureStamp
     private static readonly PdfName _objr = new(name: "OBJR");
 
     private readonly Dictionary<int, Dictionary<int, PdfIndirectReference>> _added = new();
+    private readonly Dictionary<PdfDictionary, PdfIndirectReference> _addedAnnotations = new();
     private readonly Dictionary<int, int> _nextMcid = new();
     private readonly Dictionary<int, int> _pageByObjectNumber = new();
     private readonly List<Placement> _placements = new();
@@ -118,6 +119,61 @@ public sealed class PdfStructureStamp
         content.BeginMarkedContentSequence(role, properties, inline: true);
     }
 
+    /// <summary>
+    ///     Gives an annotation a structure element of its own, holding a reference to the annotation
+    ///     rather than to marked content.
+    /// </summary>
+    /// <remarks>
+    ///     A link or a form field is reachable when the tree holds an /OBJR naming it and the annotation
+    ///     carries the /StructParent that names the element back. Neither exists for an annotation the
+    ///     caller has just made, so both are written here: the element now, and the key when
+    ///     <see cref="Complete" /> settles the numbering.
+    /// </remarks>
+    /// <param name="page">the page the annotation sits on, one based</param>
+    /// <param name="annotation">the annotation dictionary, still to be written to the body</param>
+    /// <param name="reference">the reference it will be written at</param>
+    /// <param name="role">the structure type, for instance <c>PdfName.Link</c></param>
+    /// <param name="top">the y it sits at, which is what places it in reading order</param>
+    public void AddAnnotation(int page, PdfDictionary annotation, PdfIndirectReference reference,
+        PdfName role, float? top = null)
+    {
+        if (annotation == null)
+        {
+            throw new ArgumentNullException(nameof(annotation));
+        }
+
+        if (reference == null)
+        {
+            throw new ArgumentNullException(nameof(reference));
+        }
+
+        if (role == null)
+        {
+            throw new ArgumentNullException(nameof(role));
+        }
+
+        if (!IsTagged)
+        {
+            return;
+        }
+
+        EnsureContainer();
+        var pageReference = _reader.GetPageOrigRef(page);
+        var element = new PdfDictionary(_structElem);
+        element.Put(PdfName.S, role);
+        element.Put(PdfName.P, _containerReference);
+        element.Put(PdfName.Pg, pageReference);
+
+        var objectReference = new PdfDictionary(_objr);
+        objectReference.Put(PdfName.Obj, reference);
+        objectReference.Put(PdfName.Pg, pageReference);
+        element.Put(PdfName.K, objectReference);
+
+        var elementReference = _writer.AddToBody(element).IndirectReference;
+        Attach(elementReference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
+        _addedAnnotations[annotation] = elementReference;
+    }
+
     /// <summary>Closes the sequence <see cref="Begin" /> opened.</summary>
     public void End(PdfContentByte content)
     {
@@ -140,7 +196,7 @@ public sealed class PdfStructureStamp
     {
         if (IsTagged)
         {
-            PdfParentTreeBuilder.Rebuild(_reader, _added);
+            PdfParentTreeBuilder.Rebuild(_reader, _added, _addedAnnotations);
         }
     }
 
