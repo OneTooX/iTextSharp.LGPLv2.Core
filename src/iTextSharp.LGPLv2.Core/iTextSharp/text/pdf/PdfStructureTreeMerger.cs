@@ -18,10 +18,14 @@
 ///         its children, and following that would drag the whole source tree across.
 ///     </para>
 ///     <para>
-///         Two things are deliberately dropped. /OBJR entries, which name an annotation, cannot be
-///         remapped without knowing what the annotation became in the assembled document. And an
-///         element is kept only when a page it describes was copied, so copying half a document
-///         leaves the other half's structure behind.
+///         An /OBJR names an annotation, and the assembled document holds a copy of it rather than the
+///         annotation itself. PdfCopy knows what that copy became, so the reference is rebuilt against
+///         it, and the key the annotation needs in /ParentTree is handed out before the page is copied,
+///         since the copy carries whatever /StructParent it finds.
+///     </para>
+///     <para>
+///         One thing is deliberately dropped: an element is kept only when a page it describes was
+///         copied, so copying half a document leaves the other half's structure behind.
 ///     </para>
 /// </remarks>
 internal sealed class PdfStructureTreeMerger
@@ -33,6 +37,7 @@ internal sealed class PdfStructureTreeMerger
         PdfName.Id
     };
 
+    private readonly Dictionary<PdfReader, Dictionary<int, Annotation>> _annotations = new();
     private readonly Dictionary<int, TargetPage> _byMergedPage = new();
     private readonly List<TargetPage> _inOrder = new();
     private readonly Dictionary<PdfReader, Dictionary<int, TargetPage>> _pages = new();
@@ -41,6 +46,7 @@ internal sealed class PdfStructureTreeMerger
     private readonly Dictionary<PdfDictionary, bool> _survives = new();
     private readonly PdfWriter _writer;
     private PdfObject _lang;
+    private int _nextKey;
     private PdfObject _title;
     private PdfDictionary _viewerPreferences;
     private byte[] _xmp;
@@ -83,11 +89,70 @@ internal sealed class PdfStructureTreeMerger
             return null; // the same source page copied twice; the first placement owns the structure
         }
 
-        var target = new TargetPage(targetPage, _inOrder.Count);
+        var target = new TargetPage(targetPage, _nextKey++);
         forReader[sourcePage.Number] = target;
         _inOrder.Add(target);
 
         return new PdfNumber(target.StructParents);
+    }
+
+    /// <summary>
+    ///     Gives every tagged annotation on a source page the key it will have in the assembled
+    ///     document, before the page is copied. The copy carries whatever /StructParent it finds, and is
+    ///     written where it can no longer be reached, so the number has to be right beforehand - which
+    ///     means writing it onto the source, whose own numbering the copy has left behind in any case.
+    /// </summary>
+    public void PrepareAnnotations(PdfReader reader, PdfDictionary page)
+    {
+        if (reader?.Catalog?.GetAsDict(PdfName.Structtreeroot) == null)
+        {
+            return;
+        }
+
+        var annots = page?.GetAsArray(PdfName.Annots);
+
+        if (annots == null)
+        {
+            return;
+        }
+
+        if (!_annotations.TryGetValue(reader, out var forReader))
+        {
+            forReader = new Dictionary<int, Annotation>();
+            _annotations[reader] = forReader;
+        }
+
+        for (var index = 0; index < annots.Size; index++)
+        {
+            if (annots[index] is not PrIndirectReference reference || forReader.ContainsKey(reference.Number)
+                || PdfReader.GetPdfObject(reference) is not PdfDictionary annotation
+                || annotation.Get(PdfName.Structparent) == null)
+            {
+                continue;
+            }
+
+            var noted = new Annotation(reference, _nextKey++);
+            forReader[reference.Number] = noted;
+            annotation.Put(PdfName.Structparent, new PdfNumber(noted.Key));
+        }
+    }
+
+    /// <summary>
+    ///     Notes what the annotations just copied became. The map PdfCopy keeps is per reader and
+    ///     goes when the reader is freed, which a caller doing a long merge does as it proceeds, so the
+    ///     reference has to be taken while the page is being copied rather than when the tree is built.
+    /// </summary>
+    public void NoteCopiedAnnotations(PdfReader reader, PdfCopy copy)
+    {
+        if (copy == null || reader == null || !_annotations.TryGetValue(reader, out var forReader))
+        {
+            return;
+        }
+
+        foreach (var noted in forReader.Values)
+        {
+            noted.Copied ??= copy.CopiedReference(reader, noted.Reference);
+        }
     }
 
     /// <summary>
@@ -128,7 +193,7 @@ internal sealed class PdfStructureTreeMerger
 
         root.Put(PdfName.K, kids);
         root.Put(PdfName.Parenttree, BuildParentTree());
-        root.Put(PdfName.Parenttreenextkey, new PdfNumber(_inOrder.Count));
+        root.Put(PdfName.Parenttreenextkey, new PdfNumber(_nextKey));
 
         if (_roleMap.Size > 0)
         {
@@ -245,7 +310,9 @@ internal sealed class PdfStructureTreeMerger
 
         if (PdfName.Objr.Equals(type))
         {
-            return; // an annotation reference the assembled document cannot resolve
+            AddObjectReference(dictionary, reader, owner, page, kids);
+
+            return;
         }
 
         var nested = Rebuild(child, reader, owner, page);
@@ -272,6 +339,41 @@ internal sealed class PdfStructureTreeMerger
         rebuilt.Put(PdfName.Pg, target.Reference);
         kids.Add(rebuilt);
         target.Owners[mcid.IntValue] = owner;
+    }
+
+    /// <summary>
+    ///     An /OBJR names an annotation, and what the assembled document holds is a copy of it. The
+    ///     reference is rebuilt against that copy, and the annotation's entry in /ParentTree is filled in
+    ///     with the element holding it.
+    /// </summary>
+    private void AddObjectReference(PdfDictionary reference, PdfReader reader, PdfIndirectReference owner,
+        int? page, PdfArray kids)
+    {
+        var noted = AnnotationOf(reference, reader);
+        var target = TargetOf(reader, PageOf(reference, page));
+
+        if (noted?.Copied == null || target == null)
+        {
+            return;
+        }
+
+        var rebuilt = new PdfDictionary(PdfName.Objr);
+        rebuilt.Put(PdfName.Obj, noted.Copied);
+        rebuilt.Put(PdfName.Pg, target.Reference);
+        kids.Add(rebuilt);
+        noted.Owner = owner;
+    }
+
+    /// <summary>The annotation an /OBJR names, when it is one this merge has keyed.</summary>
+    private Annotation AnnotationOf(PdfDictionary reference, PdfReader reader)
+    {
+        if (reference.Get(PdfName.Obj) is not PrIndirectReference annotation
+            || !_annotations.TryGetValue(reader, out var forReader))
+        {
+            return null;
+        }
+
+        return forReader.TryGetValue(annotation.Number, out var noted) ? noted : null;
     }
 
     /// <summary>
@@ -302,7 +404,8 @@ internal sealed class PdfStructureTreeMerger
                 PdfNumber => TargetOf(reader, page) != null,
                 PdfDictionary dictionary when PdfName.Mcr.Equals(dictionary.Get(PdfName.TYPE)) =>
                     TargetOf(reader, PageOf(dictionary, page)) != null,
-                PdfDictionary dictionary when PdfName.Objr.Equals(dictionary.Get(PdfName.TYPE)) => false,
+                PdfDictionary dictionary when PdfName.Objr.Equals(dictionary.Get(PdfName.TYPE)) =>
+                    AnnotationOf(dictionary, reader) != null && TargetOf(reader, PageOf(dictionary, page)) != null,
                 PdfDictionary nested => Survives(nested, reader, PageOf(nested, page)),
                 _ => false
             };
@@ -324,34 +427,60 @@ internal sealed class PdfStructureTreeMerger
     /// </summary>
     private PdfDictionary BuildParentTree()
     {
-        var nums = new PdfArray();
+        // Pages and annotations draw their keys from the same counter, so the entries are gathered by
+        // key and written in that order: a number tree has to ascend.
+        var entries = new SortedDictionary<int, PdfObject>();
 
         foreach (var page in _inOrder)
         {
-            var entries = new PdfArray();
-            var highest = -1;
+            entries[page.StructParents] = EntriesByMcid(page);
+        }
 
-            foreach (var mcid in page.Owners.Keys)
+        foreach (var forReader in _annotations.Values)
+        {
+            foreach (var noted in forReader.Values)
             {
-                if (mcid > highest)
+                if (noted.Owner != null)
                 {
-                    highest = mcid;
+                    entries[noted.Key] = noted.Owner;
                 }
             }
+        }
 
-            for (var mcid = 0; mcid <= highest; mcid++)
-            {
-                entries.Add(page.Owners.TryGetValue(mcid, out var owner) ? owner : PdfNull.Pdfnull);
-            }
+        var nums = new PdfArray();
 
-            nums.Add(new PdfNumber(page.StructParents));
-            nums.Add(entries);
+        foreach (var entry in entries)
+        {
+            nums.Add(new PdfNumber(entry.Key));
+            nums.Add(entry.Value);
         }
 
         var parentTree = new PdfDictionary();
         parentTree.Put(PdfName.Nums, nums);
 
         return parentTree;
+    }
+
+    /// <summary>A page's entry is indexed by marked content id, so the gaps have to be filled.</summary>
+    private static PdfArray EntriesByMcid(TargetPage page)
+    {
+        var entries = new PdfArray();
+        var highest = -1;
+
+        foreach (var mcid in page.Owners.Keys)
+        {
+            if (mcid > highest)
+            {
+                highest = mcid;
+            }
+        }
+
+        for (var mcid = 0; mcid <= highest; mcid++)
+        {
+            entries.Add(page.Owners.TryGetValue(mcid, out var owner) ? owner : PdfNull.Pdfnull);
+        }
+
+        return entries;
     }
 
     /// <summary>
@@ -454,6 +583,21 @@ internal sealed class PdfStructureTreeMerger
             default:
                 return resolved ?? PdfNull.Pdfnull;
         }
+    }
+
+    /// <summary>An annotation this merge has keyed, and the element that ends up holding it.</summary>
+    private sealed class Annotation
+    {
+        public Annotation(PrIndirectReference reference, int key)
+        {
+            Reference = reference;
+            Key = key;
+        }
+
+        public PrIndirectReference Reference { get; }
+        public PdfIndirectReference Copied { get; set; }
+        public int Key { get; }
+        public PdfIndirectReference Owner { get; set; }
     }
 
     private sealed class TargetPage

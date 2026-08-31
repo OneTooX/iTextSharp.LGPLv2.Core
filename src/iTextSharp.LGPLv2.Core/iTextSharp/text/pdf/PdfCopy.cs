@@ -103,7 +103,12 @@ public class PdfCopy : PdfWriter
         }
 
         iRef.SetCopied();
+
+        // The annotations need the key they will have in the assembled document before the copy reads
+        // them: what it carries across is written where it can no longer be reached.
+        _structure.PrepareAnnotations(Reader, thePage);
         var newPage = CopyDictionary(thePage);
+        _structure.NoteCopiedAnnotations(Reader, this);
 
         // The /StructParents that came across is the source document's key and means nothing here.
         // The merger hands out the key this page has in the assembled document, or null when the
@@ -121,6 +126,22 @@ public class PdfCopy : PdfWriter
 
         Root.AddPage(newPage);
         ++currentPageNumber;
+    }
+
+    /// <summary>
+    ///     The reference a source object was copied to, or null when this copy has not seen it. The
+    ///     structure merger needs it to name an annotation the assembled document holds a copy of.
+    /// </summary>
+    internal PdfIndirectReference CopiedReference(PdfReader reader, PrIndirectReference source)
+    {
+        if (reader == null || source == null)
+        {
+            return null;
+        }
+
+        var indirects = IndirectMap[reader];
+
+        return indirects?[new RefKey(source)]?.Ref;
     }
 
     /// <summary>
