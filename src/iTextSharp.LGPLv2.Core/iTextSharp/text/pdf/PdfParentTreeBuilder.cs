@@ -12,9 +12,11 @@
 ///         because the keys have to be renumbered anyway once pages have moved.
 ///     </para>
 ///     <para>
-///         Annotations key into the same number tree through their own /StructParent, and those keys
-///         are left alone. A document that has both annotations and edited pages can therefore end up
-///         with an annotation pointing at a key that now belongs to a page.
+///         Annotations key into the same number tree through their own /StructParent, and their entries
+///         are derived along with the pages': the element holding an annotation's /OBJR is what its key
+///         names, written directly rather than through an array, and the key is written back onto the
+///         annotation, the one it arrived with belonging to a numbering that is now gone. An annotation
+///         the tree does not point at keeps the key it had, there being nothing to renumber it to.
 ///     </para>
 /// </remarks>
 internal static class PdfParentTreeBuilder
@@ -41,10 +43,11 @@ internal static class PdfParentTreeBuilder
         }
 
         var owners = new Dictionary<int, Dictionary<int, PdfIndirectReference>>();
+        var annotations = new Dictionary<int, PdfIndirectReference>();
 
         foreach (var kid in PdfStructureTreePruner.Children(structTreeRoot.Get(PdfName.K)))
         {
-            Collect(kid, inheritedPage: null, owners);
+            Collect(kid, inheritedPage: null, owners, annotations);
         }
 
         if (added != null)
@@ -58,12 +61,13 @@ internal static class PdfParentTreeBuilder
             }
         }
 
-        Write(reader, structTreeRoot, owners);
+        Write(reader, structTreeRoot, owners, annotations);
     }
 
     /// <summary>Walks the tree noting which element owns each marked content id on each page.</summary>
     private static void Collect(PdfObject node, int? inheritedPage,
-        Dictionary<int, Dictionary<int, PdfIndirectReference>> owners)
+        Dictionary<int, Dictionary<int, PdfIndirectReference>> owners,
+        Dictionary<int, PdfIndirectReference> annotations)
     {
         if (PdfReader.GetPdfObject(node) is not PdfDictionary element || element.Get(PdfName.S) == null)
         {
@@ -103,10 +107,19 @@ internal static class PdfParentTreeBuilder
                 continue;
             }
 
-            if (!PdfName.Objr.Equals(type))
+            if (PdfName.Objr.Equals(type))
             {
-                Collect(child, page, owners);
+                // The annotation keys into this tree itself, and what its key has to name is the
+                // element that holds the reference to it.
+                if (dictionary.Get(PdfName.Obj) is PrIndirectReference annotation && reference != null)
+                {
+                    annotations[annotation.Number] = reference;
+                }
+
+                continue;
             }
+
+            Collect(child, page, owners, annotations);
         }
     }
 
@@ -130,7 +143,8 @@ internal static class PdfParentTreeBuilder
     }
 
     private static void Write(PdfReader reader, PdfDictionary structTreeRoot,
-        Dictionary<int, Dictionary<int, PdfIndirectReference>> owners)
+        Dictionary<int, Dictionary<int, PdfIndirectReference>> owners,
+        Dictionary<int, PdfIndirectReference> annotations)
     {
         var nums = new PdfArray();
         var key = 0;
@@ -158,6 +172,8 @@ internal static class PdfParentTreeBuilder
             key++;
         }
 
+        key = WriteAnnotations(reader, nums, annotations, key);
+
         var parentTree = structTreeRoot.GetAsDict(PdfName.Parenttree);
 
         if (parentTree == null)
@@ -171,6 +187,47 @@ internal static class PdfParentTreeBuilder
         parentTree.Remove(PdfName.Limits);
         parentTree.Put(PdfName.Nums, nums);
         structTreeRoot.Put(PdfName.Parenttreenextkey, new PdfNumber(key));
+    }
+
+    /// <summary>
+    ///     Writes one entry per annotation the tree points at, after the pages' entries. The value is
+    ///     the element itself rather than an array - ISO 32000-1 14.7.4.4 - and the key goes back onto
+    ///     the annotation, since the one it arrived with belonged to a numbering that is now gone.
+    /// </summary>
+    private static int WriteAnnotations(PdfReader reader, PdfArray nums,
+        Dictionary<int, PdfIndirectReference> annotations, int key)
+    {
+        if (annotations.Count == 0)
+        {
+            return key;
+        }
+
+        for (var page = 1; page <= reader.NumberOfPages; page++)
+        {
+            var annots = reader.GetPageN(page)?.GetAsArray(PdfName.Annots);
+
+            if (annots == null)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < annots.Size; index++)
+            {
+                if (annots[index] is not PrIndirectReference annotation
+                    || !annotations.TryGetValue(annotation.Number, out var owner)
+                    || PdfReader.GetPdfObject(annotation) is not PdfDictionary dictionary)
+                {
+                    continue;
+                }
+
+                nums.Add(new PdfNumber(key));
+                nums.Add(owner);
+                dictionary.Put(PdfName.Structparent, new PdfNumber(key));
+                key++;
+            }
+        }
+
+        return key;
     }
 
     /// <summary>
