@@ -231,8 +231,11 @@ internal sealed class PdfStructureTreeMerger
         }
 
         var page = PageOf(element, inheritedPage);
+        var children = PdfStructureTreePruner.Children(element.Get(PdfName.K));
 
-        if (!Survives(element, reader, page))
+        // A childless element carries no content to place it, so there is nothing to ask: it is
+        // reached only from a parent that survives, and it goes wherever that parent goes.
+        if (children.Count > 0 && !Survives(element, reader, page))
         {
             return null;
         }
@@ -241,12 +244,15 @@ internal sealed class PdfStructureTreeMerger
         var target = TargetOf(reader, page);
         var kids = new PdfArray();
 
-        foreach (var child in PdfStructureTreePruner.Children(element.Get(PdfName.K)))
+        foreach (var child in children)
         {
             AddChild(child, reader, reference, page, target, kids);
         }
 
-        if (kids.Size == 0)
+        // An element that had children and has none left described pages this merge did not take.
+        // One that never had any - an empty table cell - has lost nothing, and its row still needs
+        // the column.
+        if (kids.Size == 0 && children.Count > 0)
         {
             return null;
         }
@@ -263,7 +269,11 @@ internal sealed class PdfStructureTreeMerger
             }
         }
 
-        rebuilt.Put(PdfName.K, kids);
+        if (kids.Size > 0)
+        {
+            rebuilt.Put(PdfName.K, kids);
+        }
+
         rebuilt.Put(PdfName.P, parent);
 
         if (target != null)
@@ -395,6 +405,7 @@ internal sealed class PdfStructureTreeMerger
         _survives[element] = false; // stops a tree that points back at itself
         var survives = false;
 
+        // A childless child answers false: it carries nothing that can keep this element alive.
         foreach (var child in PdfStructureTreePruner.Children(element.Get(PdfName.K)))
         {
             var resolved = PdfReader.GetPdfObject(child);

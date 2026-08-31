@@ -101,17 +101,38 @@ internal static class PdfStructureTreePruner
         }
 
         var page = PageOf(element, inheritedPage);
+        var children = Children(element.Get(PdfName.K));
         var kept = new PdfArray();
 
-        foreach (var child in Children(element.Get(PdfName.K)))
+        var content = false;
+
+        foreach (var child in children)
         {
+            // An element that never had children of its own - an empty table cell, say - carries no
+            // content to place it, and nothing in it can be said to describe a page that is gone. It
+            // is kept when its parent is, and dropping it would take a column out of its row.
+            if (IsChildless(child))
+            {
+                kept.Add(child);
+
+                continue;
+            }
+
             if (KeepChild(child, page, survivors))
             {
                 kept.Add(child);
+                content = true;
             }
         }
 
-        if (kept.Size == 0)
+        if (children.Count == 0)
+        {
+            return true;
+        }
+
+        // Nothing that carries content survived, so the empty ones go with it: a row of empty cells
+        // is not worth keeping once the row's own page has gone.
+        if (!content)
         {
             return false;
         }
@@ -153,6 +174,11 @@ internal static class PdfStructureTreePruner
 
         return KeepElement(child, page, survivors);
     }
+
+    /// <summary>A structure element with no /K of its own: an empty cell, a placeholder, a spacer.</summary>
+    private static bool IsChildless(PdfObject child) =>
+        PdfReader.GetPdfObject(child) is PdfDictionary element && element.Get(PdfName.S) != null
+        && element.Get(PdfName.K) == null;
 
     private static bool Lives(int? page, HashSet<int> survivors) => page is int number && survivors.Contains(number);
 
