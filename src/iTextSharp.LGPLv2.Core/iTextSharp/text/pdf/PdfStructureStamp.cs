@@ -86,7 +86,14 @@ public sealed class PdfStructureStamp
     ///     reading order. Leave it out only when the position is genuinely unknown; the element is
     ///     then appended, and is read after everything the document already says.
     /// </param>
-    public void Begin(PdfContentByte content, int page, PdfName role, float? top = null)
+    /// <param name="actual">
+    ///     what the content says, when what is drawn does not spell it. A line the layout breaks in
+    ///     two is drawn as two, and a reader running them together gets "navn og" and "adresse" as
+    ///     "ogadresse" - nothing in the sequence says a line ended. /ActualText is read in place of
+    ///     the content, so it has to be exactly what the content shows.
+    /// </param>
+    public void Begin(PdfContentByte content, int page, PdfName role, float? top = null,
+        string actual = null)
     {
         if (content == null)
         {
@@ -110,6 +117,12 @@ public sealed class PdfStructureStamp
         element.Put(PdfName.P, _containerReference);
         element.Put(PdfName.Pg, _reader.GetPageOrigRef(page));
         element.Put(PdfName.K, new PdfNumber(mcid));
+
+        if (!string.IsNullOrEmpty(actual))
+        {
+            element.Put(PdfName.Actualtext, new PdfString(actual, PdfObject.TEXT_UNICODE));
+        }
+
         var reference = _writer.AddToBody(element).IndirectReference;
         Attach(reference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
         Remember(page, mcid, reference);
