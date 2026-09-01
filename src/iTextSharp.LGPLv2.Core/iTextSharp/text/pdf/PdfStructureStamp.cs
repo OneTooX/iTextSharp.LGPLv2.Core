@@ -128,14 +128,24 @@ public sealed class PdfStructureStamp
     ///     carries the /StructParent that names the element back. Neither exists for an annotation the
     ///     caller has just made, so both are written here: the element now, and the key when
     ///     <see cref="Complete" /> settles the numbering.
+    ///     <para>
+    ///         The element is hung in a paragraph rather than straight off the container. A Link is an
+    ///         inline-level element and belongs inside a block-level one; a checker reading a Link as a
+    ///         direct child of the document element reports it as inappropriate use, and it is.
+    ///     </para>
     /// </remarks>
     /// <param name="page">the page the annotation sits on, one based</param>
     /// <param name="annotation">the annotation dictionary, still to be written to the body</param>
     /// <param name="reference">the reference it will be written at</param>
     /// <param name="role">the structure type, for instance <c>PdfName.Link</c></param>
     /// <param name="top">the y it sits at, which is what places it in reading order</param>
+    /// <param name="alternate">
+    ///     what the annotation says, for an element that holds no text of its own. An element with
+    ///     nothing but an /OBJR under it is announced as a link with no name, so the caller passes
+    ///     whatever the annotation covers.
+    /// </param>
     public void AddAnnotation(int page, PdfDictionary annotation, PdfIndirectReference reference,
-        PdfName role, float? top = null)
+        PdfName role, float? top = null, string alternate = null)
     {
         if (annotation == null)
         {
@@ -159,10 +169,16 @@ public sealed class PdfStructureStamp
 
         EnsureContainer();
         var pageReference = _reader.GetPageOrigRef(page);
+        var wrapperReference = _writer.PdfIndirectReference;
         var element = new PdfDictionary(_structElem);
         element.Put(PdfName.S, role);
-        element.Put(PdfName.P, _containerReference);
+        element.Put(PdfName.P, wrapperReference);
         element.Put(PdfName.Pg, pageReference);
+
+        if (!string.IsNullOrEmpty(alternate))
+        {
+            element.Put(PdfName.Alt, new PdfString(alternate, PdfObject.TEXT_UNICODE));
+        }
 
         var objectReference = new PdfDictionary(_objr);
         objectReference.Put(PdfName.Obj, reference);
@@ -170,7 +186,15 @@ public sealed class PdfStructureStamp
         element.Put(PdfName.K, objectReference);
 
         var elementReference = _writer.AddToBody(element).IndirectReference;
-        Attach(elementReference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
+
+        var wrapper = new PdfDictionary(_structElem);
+        wrapper.Put(PdfName.S, PdfName.P);
+        wrapper.Put(PdfName.P, _containerReference);
+        wrapper.Put(PdfName.Pg, pageReference);
+        wrapper.Put(PdfName.K, new PdfArray(elementReference));
+        _writer.AddToBody(wrapper, wrapperReference);
+
+        Attach(wrapperReference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
         _addedAnnotations[annotation] = elementReference;
     }
 
