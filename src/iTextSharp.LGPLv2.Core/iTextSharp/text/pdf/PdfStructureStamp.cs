@@ -91,6 +91,12 @@ public sealed class PdfStructureStamp
     ///     two is drawn as two, and a reader running them together gets "navn og" and "adresse" as
     ///     "ogadresse" - nothing in the sequence says a line ended. /ActualText is read in place of
     ///     the content, so it has to be exactly what the content shows.
+    ///     <para>
+    ///         It goes on the marked content rather than on the element. On the element it is a
+    ///         replacement for everything the element stands for, and a reader then stops treating the
+    ///         element as a block of its own: PAC ran five stamped paragraphs together into one line
+    ///         when they carried it, while the ones without stayed apart.
+    ///     </para>
     /// </param>
     public void Begin(PdfContentByte content, int page, PdfName role, float? top = null,
         string actual = null)
@@ -117,18 +123,18 @@ public sealed class PdfStructureStamp
         element.Put(PdfName.P, _containerReference);
         element.Put(PdfName.Pg, _reader.GetPageOrigRef(page));
         element.Put(PdfName.K, new PdfNumber(mcid));
-
-        if (!string.IsNullOrEmpty(actual))
-        {
-            element.Put(PdfName.Actualtext, new PdfString(actual, PdfObject.TEXT_UNICODE));
-        }
-
         var reference = _writer.AddToBody(element).IndirectReference;
         Attach(reference, top.HasValue ? new Placement(page, top.Value) : Placement.Last);
         Remember(page, mcid, reference);
 
         var properties = new PdfDictionary();
         properties.Put(PdfName.Mcid, new PdfNumber(mcid));
+
+        if (!string.IsNullOrEmpty(actual))
+        {
+            properties.Put(PdfName.Actualtext, new PdfString(actual, PdfObject.TEXT_UNICODE));
+        }
+
         content.BeginMarkedContentSequence(role, properties, inline: true);
     }
 
