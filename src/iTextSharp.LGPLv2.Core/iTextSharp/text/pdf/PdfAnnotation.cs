@@ -51,17 +51,17 @@ public class PdfAnnotation : PdfDictionary
     /// </summary>
     private int _placeInPage = -1;
 
-    protected internal bool Annotation = true;
-    protected internal bool Form;
-    protected internal PdfIndirectReference Reference;
-    protected internal INullValueDictionary<PdfTemplate, object> templates;
+    internal protected bool Annotation = true;
+    internal protected bool Form;
+    internal protected PdfIndirectReference Reference;
+    internal protected INullValueDictionary<PdfTemplate, object> templates;
 
     /// <summary>
     ///     Holds value of property used.
     /// </summary>
-    protected internal bool Used;
+    internal protected bool Used;
 
-    protected internal PdfWriter Writer;
+    internal protected PdfWriter Writer;
 
     /// <summary>
     ///     constructors
@@ -69,6 +69,7 @@ public class PdfAnnotation : PdfDictionary
     public PdfAnnotation(PdfWriter writer, Rectangle rect)
     {
         Writer = writer;
+
         if (rect != null)
         {
             Put(PdfName.Rect, new PdfRectangle(rect));
@@ -78,8 +79,13 @@ public class PdfAnnotation : PdfDictionary
     /// <summary>
     ///     Constructs a new  PdfAnnotation  of subtype text.
     /// </summary>
-    public PdfAnnotation(PdfWriter writer, float llx, float lly, float urx, float ury, PdfString title,
-                         PdfString content)
+    public PdfAnnotation(PdfWriter writer,
+        float llx,
+        float lly,
+        float urx,
+        float ury,
+        PdfString title,
+        PdfString content)
     {
         Writer = writer;
         Put(PdfName.Subtype, PdfName.Text);
@@ -97,8 +103,8 @@ public class PdfAnnotation : PdfDictionary
         Put(PdfName.Subtype, PdfName.Link);
         Put(PdfName.Rect, new PdfRectangle(llx, lly, urx, ury));
         Put(PdfName.A, action);
-        Put(PdfName.Border, new PdfBorderArray(0, 0, 0));
-        Put(PdfName.C, new PdfColor(0x00, 0x00, 0xFF));
+        Put(PdfName.Border, new PdfBorderArray(hRadius: 0, vRadius: 0, width: 0));
+        Put(PdfName.C, new PdfColor(red: 0x00, green: 0x00, blue: 0xFF));
     }
 
     public PdfAction Action
@@ -113,6 +119,7 @@ public class PdfAnnotation : PdfDictionary
             if (value == null)
             {
                 Remove(PdfName.As);
+
                 return;
             }
 
@@ -132,15 +139,29 @@ public class PdfAnnotation : PdfDictionary
 
     public BaseColor Color
     {
-        set => Put(PdfName.C, new PdfColor(value));
+        set
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            Put(PdfName.C, new PdfColor(value));
+        }
     }
 
     public PdfContentByte DefaultAppearanceString
     {
         set
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             var b = value.InternalBuffer.ToByteArray();
             var len = b.Length;
+
             for (var k = 0; k < len; ++k)
             {
                 if (b[k] == '\n')
@@ -186,7 +207,15 @@ public class PdfAnnotation : PdfDictionary
     /// </summary>
     public IPdfOcg Layer
     {
-        set => Put(PdfName.Oc, value.Ref);
+        set
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            Put(PdfName.Oc, value.Ref);
+        }
     }
 
     public string MkAlternateCaption
@@ -196,7 +225,15 @@ public class PdfAnnotation : PdfDictionary
 
     public PdfTemplate MkAlternateIcon
     {
-        set => Mk.Put(PdfName.Ix, value.IndirectReference);
+        set
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            Mk.Put(PdfName.Ix, value.IndirectReference);
+        }
     }
 
     public BaseColor MkBackgroundColor
@@ -236,7 +273,15 @@ public class PdfAnnotation : PdfDictionary
 
     public PdfTemplate MkNormalIcon
     {
-        set => Mk.Put(PdfName.I, value.IndirectReference);
+        set
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            Mk.Put(PdfName.I, value.IndirectReference);
+        }
     }
 
     public string MkRolloverCaption
@@ -246,7 +291,15 @@ public class PdfAnnotation : PdfDictionary
 
     public PdfTemplate MkRolloverIcon
     {
-        set => Mk.Put(PdfName.Ri, value.IndirectReference);
+        set
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            Mk.Put(PdfName.Ri, value.IndirectReference);
+        }
     }
 
     public int MkRotation
@@ -289,6 +342,11 @@ public class PdfAnnotation : PdfDictionary
     {
         set
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             Put(PdfName.Popup, value.IndirectReference);
             value.Put(PdfName.Parent, IndirectReference);
         }
@@ -308,6 +366,7 @@ public class PdfAnnotation : PdfDictionary
             if (value == null)
             {
                 Remove(PdfName.T);
+
                 return;
             }
 
@@ -320,6 +379,7 @@ public class PdfAnnotation : PdfDictionary
         get
         {
             var mk = (PdfDictionary)Get(PdfName.Mk);
+
             if (mk == null)
             {
                 mk = new PdfDictionary();
@@ -343,10 +403,14 @@ public class PdfAnnotation : PdfDictionary
     /// <param name="file">the path to the file. It will only be used if</param>
     /// <param name="fileDisplay">the actual file name stored in the pdf</param>
     /// <returns>the annotation</returns>
-    public static PdfAnnotation CreateFileAttachment(PdfWriter writer, Rectangle rect, string contents,
-                                                     byte[] fileStore, string file, string fileDisplay) =>
-        CreateFileAttachment(writer, rect, contents,
-                             PdfFileSpecification.FileEmbedded(writer, file, fileDisplay, fileStore));
+    public static PdfAnnotation CreateFileAttachment(PdfWriter writer,
+        Rectangle rect,
+        string contents,
+        byte[] fileStore,
+        string file,
+        string fileDisplay)
+        => CreateFileAttachment(writer, rect, contents,
+            PdfFileSpecification.FileEmbedded(writer, file, fileDisplay, fileStore));
 
     /// <summary>
     ///     Creates a file attachment annotation
@@ -357,40 +421,59 @@ public class PdfAnnotation : PdfDictionary
     /// <param name="contents"></param>
     /// <param name="fs"></param>
     /// <returns>the annotation</returns>
-    public static PdfAnnotation CreateFileAttachment(PdfWriter writer, Rectangle rect, string contents,
-                                                     PdfFileSpecification fs)
+    public static PdfAnnotation CreateFileAttachment(PdfWriter writer,
+        Rectangle rect,
+        string contents,
+        PdfFileSpecification fs)
     {
+        if (fs == null)
+        {
+            throw new ArgumentNullException(nameof(fs));
+        }
+
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Fileattachment);
+
         if (contents != null)
         {
             annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
         }
 
         annot.Put(PdfName.Fs, fs.Reference);
+
         return annot;
     }
 
-    public static PdfAnnotation CreateFreeText(PdfWriter writer, Rectangle rect, string contents,
-                                               PdfContentByte defaultAppearance)
+    public static PdfAnnotation CreateFreeText(PdfWriter writer,
+        Rectangle rect,
+        string contents,
+        PdfContentByte defaultAppearance)
     {
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Freetext);
         annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
         annot.DefaultAppearanceString = defaultAppearance;
+
         return annot;
     }
 
     public static PdfAnnotation CreateInk(PdfWriter writer, Rectangle rect, string contents, float[][] inkList)
     {
+        if (inkList == null)
+        {
+            throw new ArgumentNullException(nameof(inkList));
+        }
+
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Ink);
         annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
         var outer = new PdfArray();
+
         for (var k = 0; k < inkList.Length; ++k)
         {
             var inner = new PdfArray();
             var deep = inkList[k];
+
             for (var j = 0; j < deep.Length; ++j)
             {
                 inner.Add(new PdfNumber(deep[j]));
@@ -400,11 +483,17 @@ public class PdfAnnotation : PdfDictionary
         }
 
         annot.Put(PdfName.Inklist, outer);
+
         return annot;
     }
 
-    public static PdfAnnotation CreateLine(PdfWriter writer, Rectangle rect, string contents, float x1, float y1,
-                                           float x2, float y2)
+    public static PdfAnnotation CreateLine(PdfWriter writer,
+        Rectangle rect,
+        string contents,
+        float x1,
+        float y1,
+        float x2,
+        float y2)
     {
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Line);
@@ -414,6 +503,7 @@ public class PdfAnnotation : PdfDictionary
         array.Add(new PdfNumber(x2));
         array.Add(new PdfNumber(y2));
         annot.Put(PdfName.L, array);
+
         return annot;
     }
 
@@ -421,6 +511,7 @@ public class PdfAnnotation : PdfDictionary
     {
         var annot = CreateLink(writer, rect, highlight);
         annot.PutEx(PdfName.A, action);
+
         return annot;
     }
 
@@ -428,46 +519,75 @@ public class PdfAnnotation : PdfDictionary
     {
         var annot = CreateLink(writer, rect, highlight);
         annot.Put(PdfName.Dest, new PdfString(namedDestination));
+
         return annot;
     }
 
-    public static PdfAnnotation CreateLink(PdfWriter writer, Rectangle rect, PdfName highlight, int page,
-                                           PdfDestination dest)
+    public static PdfAnnotation CreateLink(PdfWriter writer,
+        Rectangle rect,
+        PdfName highlight,
+        int page,
+        PdfDestination dest)
     {
+        if (writer == null)
+        {
+            throw new ArgumentNullException(nameof(writer));
+        }
+
+        if (dest == null)
+        {
+            throw new ArgumentNullException(nameof(dest));
+        }
+
         var annot = CreateLink(writer, rect, highlight);
         var piref = writer.GetPageReference(page);
         dest.AddPage(piref);
         annot.Put(PdfName.Dest, dest);
+
         return annot;
     }
 
-    public static PdfAnnotation CreateMarkup(PdfWriter writer, Rectangle rect, string contents, int type,
-                                             float[] quadPoints)
+    public static PdfAnnotation CreateMarkup(PdfWriter writer,
+        Rectangle rect,
+        string contents,
+        int type,
+        float[] quadPoints)
     {
+        if (quadPoints == null)
+        {
+            throw new ArgumentNullException(nameof(quadPoints));
+        }
+
         var annot = new PdfAnnotation(writer, rect);
         var name = PdfName.Highlight;
+
         switch (type)
         {
             case MARKUP_UNDERLINE:
                 name = PdfName.Underline;
+
                 break;
             case MARKUP_STRIKEOUT:
                 name = PdfName.Strikeout;
+
                 break;
             case MARKUP_SQUIGGLY:
                 name = PdfName.Squiggly;
+
                 break;
         }
 
         annot.Put(PdfName.Subtype, name);
         annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
         var array = new PdfArray();
+
         for (var k = 0; k < quadPoints.Length; ++k)
         {
             array.Add(new PdfNumber(quadPoints[k]));
         }
 
         annot.Put(PdfName.Quadpoints, array);
+
         return annot;
     }
 
@@ -475,6 +595,7 @@ public class PdfAnnotation : PdfDictionary
     {
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Popup);
+
         if (contents != null)
         {
             annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
@@ -499,10 +620,18 @@ public class PdfAnnotation : PdfDictionary
     /// <param name="mimeType"></param>
     /// <param name="playOnDisplay"></param>
     /// <returns>a screen PdfAnnotation</returns>
-    public static PdfAnnotation CreateScreen(PdfWriter writer, Rectangle rect, string clipTitle,
-                                             PdfFileSpecification fs,
-                                             string mimeType, bool playOnDisplay)
+    public static PdfAnnotation CreateScreen(PdfWriter writer,
+        Rectangle rect,
+        string clipTitle,
+        PdfFileSpecification fs,
+        string mimeType,
+        bool playOnDisplay)
     {
+        if (writer == null)
+        {
+            throw new ArgumentNullException(nameof(writer));
+        }
+
         var ann = new PdfAnnotation(writer, rect);
         ann.Put(PdfName.Subtype, PdfName.Screen);
         ann.Put(PdfName.F, new PdfNumber(FLAGS_PRINT));
@@ -511,21 +640,24 @@ public class PdfAnnotation : PdfDictionary
         var refi = ann.IndirectReference;
         var action = PdfAction.Rendition(clipTitle, fs, mimeType, refi);
         var actionRef = writer.AddToBody(action).IndirectReference;
+
         // for play on display add trigger event
         if (playOnDisplay)
         {
             var aa = new PdfDictionary();
-            aa.Put(new PdfName("PV"), actionRef);
+            aa.Put(new PdfName(name: "PV"), actionRef);
             ann.Put(PdfName.Aa, aa);
         }
 
         ann.Put(PdfName.A, actionRef);
+
         return ann;
     }
 
     public static PdfAnnotation CreateSquareCircle(PdfWriter writer, Rectangle rect, string contents, bool square)
     {
         var annot = new PdfAnnotation(writer, rect);
+
         if (square)
         {
             annot.Put(PdfName.Subtype, PdfName.Square);
@@ -536,6 +668,7 @@ public class PdfAnnotation : PdfDictionary
         }
 
         annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
+
         return annot;
     }
 
@@ -545,14 +678,20 @@ public class PdfAnnotation : PdfDictionary
         annot.Put(PdfName.Subtype, PdfName.Stamp);
         annot.Put(PdfName.Contents, new PdfString(contents, TEXT_UNICODE));
         annot.Put(PdfName.Name, new PdfName(name));
+
         return annot;
     }
 
-    public static PdfAnnotation CreateText(PdfWriter writer, Rectangle rect, string title, string contents, bool open,
-                                           string icon)
+    public static PdfAnnotation CreateText(PdfWriter writer,
+        Rectangle rect,
+        string title,
+        string contents,
+        bool open,
+        string icon)
     {
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Text);
+
         if (title != null)
         {
             annot.Put(PdfName.T, new PdfString(title, TEXT_UNICODE));
@@ -578,13 +717,20 @@ public class PdfAnnotation : PdfDictionary
 
     public static PdfArray GetMkColor(BaseColor color)
     {
+        if (color == null)
+        {
+            throw new ArgumentNullException(nameof(color));
+        }
+
         var array = new PdfArray();
-        var type = ExtendedColor.GetType(color);
-        switch (type)
+        var colorType = ExtendedColor.GetType(color);
+
+        switch (colorType)
         {
             case ExtendedColor.TYPE_GRAY:
             {
                 array.Add(new PdfNumber(((GrayColor)color).Gray));
+
                 break;
             }
             case ExtendedColor.TYPE_CMYK:
@@ -594,16 +740,19 @@ public class PdfAnnotation : PdfDictionary
                 array.Add(new PdfNumber(cmyk.Magenta));
                 array.Add(new PdfNumber(cmyk.Yellow));
                 array.Add(new PdfNumber(cmyk.Black));
+
                 break;
             }
             case ExtendedColor.TYPE_SEPARATION:
             case ExtendedColor.TYPE_PATTERN:
             case ExtendedColor.TYPE_SHADING:
-                throw new Exception("Separations, patterns and shadings are not allowed in MK dictionary.");
+                throw new InvalidOperationException(
+                    message: "Separations, patterns and shadings are not allowed in MK dictionary.");
             default:
                 array.Add(new PdfNumber(color.R / 255f));
                 array.Add(new PdfNumber(color.G / 255f));
                 array.Add(new PdfNumber(color.B / 255f));
+
                 break;
         }
 
@@ -612,7 +761,13 @@ public class PdfAnnotation : PdfDictionary
 
     public static PdfAnnotation ShallowDuplicate(PdfAnnotation annot)
     {
+        if (annot == null)
+        {
+            throw new ArgumentNullException(nameof(annot));
+        }
+
         PdfAnnotation dup;
+
         if (annot.IsForm())
         {
             dup = new PdfFormField(annot.Writer);
@@ -623,13 +778,14 @@ public class PdfAnnotation : PdfDictionary
         }
         else
         {
-            dup = new PdfAnnotation(annot.Writer, null);
+            dup = new PdfAnnotation(annot.Writer, rect: null);
         }
 
         dup.Merge(annot);
         dup.Form = annot.Form;
         dup.Annotation = annot.Annotation;
         dup.templates = annot.templates;
+
         return dup;
     }
 
@@ -649,6 +805,7 @@ public class PdfAnnotation : PdfDictionary
     {
         PdfDictionary dic;
         var obj = Get(PdfName.Aa);
+
         if (obj != null && obj.IsDictionary())
         {
             dic = (PdfDictionary)obj;
@@ -664,7 +821,13 @@ public class PdfAnnotation : PdfDictionary
 
     public void SetAppearance(PdfName ap, PdfTemplate template)
     {
+        if (template == null)
+        {
+            throw new ArgumentNullException(nameof(template));
+        }
+
         var dic = (PdfDictionary)Get(PdfName.Ap);
+
         if (dic == null)
         {
             dic = new PdfDictionary();
@@ -672,6 +835,7 @@ public class PdfAnnotation : PdfDictionary
 
         dic.Put(ap, template.IndirectReference);
         Put(PdfName.Ap, dic);
+
         if (!Form)
         {
             return;
@@ -687,7 +851,13 @@ public class PdfAnnotation : PdfDictionary
 
     public void SetAppearance(PdfName ap, string state, PdfTemplate template)
     {
+        if (template == null)
+        {
+            throw new ArgumentNullException(nameof(template));
+        }
+
         var dicAp = (PdfDictionary)Get(PdfName.Ap);
+
         if (dicAp == null)
         {
             dicAp = new PdfDictionary();
@@ -695,6 +865,7 @@ public class PdfAnnotation : PdfDictionary
 
         PdfDictionary dic;
         var obj = dicAp.Get(ap);
+
         if (obj != null && obj.IsDictionary())
         {
             dic = (PdfDictionary)obj;
@@ -707,6 +878,7 @@ public class PdfAnnotation : PdfDictionary
         dic.Put(new PdfName(state), template.IndirectReference);
         dicAp.Put(ap, dic);
         Put(PdfName.Ap, dicAp);
+
         if (!Form)
         {
             return;
@@ -728,6 +900,11 @@ public class PdfAnnotation : PdfDictionary
     /// <param name="highlight">the annotation's highlighting mode</param>
     public void SetHighlighting(PdfName highlight)
     {
+        if (highlight == null)
+        {
+            throw new ArgumentNullException(nameof(highlight));
+        }
+
         if (highlight.Equals(HighlightInvert))
         {
             Remove(PdfName.H);
@@ -738,10 +915,24 @@ public class PdfAnnotation : PdfDictionary
         }
     }
 
-    public void SetMkIconFit(PdfName scale, PdfName scalingType, float leftoverLeft, float leftoverBottom,
-                             bool fitInBounds)
+    public void SetMkIconFit(PdfName scale,
+        PdfName scalingType,
+        float leftoverLeft,
+        float leftoverBottom,
+        bool fitInBounds)
     {
+        if (scale == null)
+        {
+            throw new ArgumentNullException(nameof(scale));
+        }
+
+        if (scalingType == null)
+        {
+            throw new ArgumentNullException(nameof(scalingType));
+        }
+
         var dic = new PdfDictionary();
+
         if (!scale.Equals(PdfName.A))
         {
             dic.Put(PdfName.Sw, scale);
@@ -752,7 +943,7 @@ public class PdfAnnotation : PdfDictionary
             dic.Put(PdfName.S, scalingType);
         }
 
-        if (leftoverLeft.ApproxNotEqual(0.5f) || leftoverBottom.ApproxNotEqual(0.5f))
+        if (leftoverLeft.ApproxNotEqual(b: 0.5f) || leftoverBottom.ApproxNotEqual(b: 0.5f))
         {
             var array = new PdfArray(new PdfNumber(leftoverLeft));
             array.Add(new PdfNumber(leftoverBottom));
@@ -767,22 +958,22 @@ public class PdfAnnotation : PdfDictionary
         Mk.Put(PdfName.If, dic);
     }
 
-    public void SetPage()
-    {
-        Put(PdfName.P, Writer.CurrentPage);
-    }
+    public void SetPage() => Put(PdfName.P, Writer.CurrentPage);
 
-    public virtual void SetUsed()
-    {
-        Used = true;
-    }
+    public virtual void SetUsed() => Used = true;
 
     internal virtual bool IsUsed() => Used;
 
     protected static PdfAnnotation CreateLink(PdfWriter writer, Rectangle rect, PdfName highlight)
     {
+        if (highlight == null)
+        {
+            throw new ArgumentNullException(nameof(highlight));
+        }
+
         var annot = new PdfAnnotation(writer, rect);
         annot.Put(PdfName.Subtype, PdfName.Link);
+
         if (!highlight.Equals(HighlightInvert))
         {
             annot.Put(PdfName.H, highlight);
@@ -846,6 +1037,7 @@ public class PdfAnnotation : PdfDictionary
         internal PdfImportedLink(PdfDictionary annotation)
         {
             _parameters = annotation.HashMap.Clone();
+
             try
             {
                 _destination = (PdfArray)_parameters[PdfName.Dest];
@@ -853,7 +1045,7 @@ public class PdfAnnotation : PdfDictionary
             }
             catch (Exception)
             {
-                throw new ArgumentException("You have to consolidate the named destinations of your reader.");
+                throw new ArgumentException(message: "You have to consolidate the named destinations of your reader.");
             }
 
             if (_destination != null)
@@ -863,19 +1055,25 @@ public class PdfAnnotation : PdfDictionary
 
             var rc = (PdfArray)_parameters[PdfName.Rect];
             _parameters.Remove(PdfName.Rect);
-            _llx = rc.GetAsNumber(0).FloatValue;
-            _lly = rc.GetAsNumber(1).FloatValue;
-            _urx = rc.GetAsNumber(2).FloatValue;
-            _ury = rc.GetAsNumber(3).FloatValue;
+            _llx = rc.GetAsNumber(idx: 0).FloatValue;
+            _lly = rc.GetAsNumber(idx: 1).FloatValue;
+            _urx = rc.GetAsNumber(idx: 2).FloatValue;
+            _ury = rc.GetAsNumber(idx: 3).FloatValue;
         }
 
         public PdfAnnotation CreateAnnotation(PdfWriter writer)
         {
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
             var annotation = new PdfAnnotation(writer, new Rectangle(_llx, _lly, _urx, _ury));
+
             if (_newPage != 0)
             {
                 var refi = writer.GetPageReference(_newPage);
-                _destination[0] = refi;
+                _destination[idx: 0] = refi;
             }
 
             if (_destination != null)
@@ -900,20 +1098,22 @@ public class PdfAnnotation : PdfDictionary
 
             // here destination is something like
             // [132 0 R, /XYZ, 29.3898, 731.864502, null]
-            var refi = _destination.GetAsIndirectObject(0);
+            var refi = _destination.GetAsIndirectObject(idx: 0);
 
             var pr = (PrIndirectReference)refi;
             var r = pr.Reader;
+
             for (var i = 1; i <= r.NumberOfPages; i++)
             {
                 var pp = r.GetPageOrigRef(i);
+
                 if (pp.Generation == pr.Generation && pp.Number == pr.Number)
                 {
                     return i;
                 }
             }
 
-            throw new ArgumentException("Page not found.");
+            throw new ArgumentException(message: "Page not found.");
         }
 
         public bool IsInternal() => _destination != null;
@@ -922,7 +1122,7 @@ public class PdfAnnotation : PdfDictionary
         {
             if (!IsInternal())
             {
-                throw new ArgumentException("Cannot change destination of external link");
+                throw new ArgumentException(message: "Cannot change destination of external link");
             }
 
             _newPage = newPage;
@@ -935,18 +1135,19 @@ public class PdfAnnotation : PdfDictionary
         /// <returns>String representation of the imported link</returns>
         public override string ToString()
         {
-            var buf = new StringBuilder("Imported link: location [");
+            var buf = new StringBuilder(value: "Imported link: location [");
             buf.Append(_llx);
-            buf.Append(' ');
+            buf.Append(value: ' ');
             buf.Append(_lly);
-            buf.Append(' ');
+            buf.Append(value: ' ');
             buf.Append(_urx);
-            buf.Append(' ');
+            buf.Append(value: ' ');
             buf.Append(_ury);
-            buf.Append("] destination ");
+            buf.Append(value: "] destination ");
             buf.Append(_destination);
-            buf.Append(" parameters ");
+            buf.Append(value: " parameters ");
             buf.Append(_parameters);
+
             return buf.ToString();
         }
 
@@ -954,17 +1155,17 @@ public class PdfAnnotation : PdfDictionary
         {
             if (!IsInternal())
             {
-                throw new ArgumentException("Cannot change destination of external link");
+                throw new ArgumentException(message: "Cannot change destination of external link");
             }
 
-            if (_destination.GetAsName(1).Equals(PdfName.Xyz))
+            if (_destination.GetAsName(idx: 1).Equals(PdfName.Xyz))
             {
-                var x = _destination.GetAsNumber(2).FloatValue;
-                var y = _destination.GetAsNumber(3).FloatValue;
+                var x = _destination.GetAsNumber(idx: 2).FloatValue;
+                var y = _destination.GetAsNumber(idx: 3).FloatValue;
                 var xx = x * a + y * c + e;
                 var yy = x * b + y * d + f;
-                _destination.ArrayList[2] = new PdfNumber(xx);
-                _destination.ArrayList[3] = new PdfNumber(yy);
+                _destination.ArrayList[index: 2] = new PdfNumber(xx);
+                _destination.ArrayList[index: 3] = new PdfNumber(yy);
             }
         }
 

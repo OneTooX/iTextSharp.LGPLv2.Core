@@ -42,6 +42,7 @@ public class XfdfReader : ISimpleXmlDocHandler
     public XfdfReader(string filename)
     {
         FileStream fin = null;
+
         try
         {
             fin = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -66,7 +67,8 @@ public class XfdfReader : ISimpleXmlDocHandler
     /// <param name="xfdfIn">the byte array with the form</param>
     public XfdfReader(byte[] xfdfIn)
     {
-        SimpleXmlParser.Parse(this, new MemoryStream(xfdfIn));
+        using var memoryStream = new MemoryStream(xfdfIn);
+        SimpleXmlParser.Parse(this, memoryStream);
     }
 
     /// <summary>
@@ -96,25 +98,33 @@ public class XfdfReader : ISimpleXmlDocHandler
     /// <param name="tag">the tag name</param>
     public void EndElement(string tag)
     {
-        if (tag.Equals("value"))
+        if (tag == null)
+        {
+            throw new ArgumentNullException(nameof(tag));
+        }
+
+        if (tag.Equals(value: "value", StringComparison.Ordinal))
         {
             var fName = "";
+
             for (var k = 0; k < _fieldNames.Count; ++k)
             {
                 fName += "." + _fieldNames[k];
             }
 
-            if (fName.StartsWith("."))
+            if (fName.StartsWith(value: '.'))
             {
-                fName = fName.Substring(1);
+                fName = fName.Substring(startIndex: 1);
             }
 
             var fVal = _fieldValues.Pop();
             var old = fields[fName];
             fields[fName] = fVal;
+
             if (old != null)
             {
                 var l = ListFields[fName];
+
                 if (l == null)
                 {
                     l = new List<string>();
@@ -125,7 +135,7 @@ public class XfdfReader : ISimpleXmlDocHandler
                 ListFields[fName] = l;
             }
         }
-        else if (tag.Equals("field"))
+        else if (tag.Equals(value: "field", StringComparison.Ordinal))
         {
             if (_fieldNames.Count != 0)
             {
@@ -137,10 +147,7 @@ public class XfdfReader : ISimpleXmlDocHandler
     /// <summary>
     ///     Called when the document starts to be parsed.
     /// </summary>
-    public void StartDocument()
-    {
-        fileSpec = ""; // and this too...
-    }
+    public void StartDocument() => fileSpec = ""; // and this too...
 
     /// <summary>
     ///     Called when a start tag is found.
@@ -149,36 +156,46 @@ public class XfdfReader : ISimpleXmlDocHandler
     /// <param name="h">the tag's attributes</param>
     public void StartElement(string tag, INullValueDictionary<string, string> h)
     {
+        if (tag == null)
+        {
+            throw new ArgumentNullException(nameof(tag));
+        }
+
+        if (h == null)
+        {
+            throw new ArgumentNullException(nameof(h));
+        }
+
         if (!_foundRoot)
         {
-            if (!tag.Equals("xfdf"))
+            if (!tag.Equals(value: "xfdf", StringComparison.Ordinal))
             {
-                throw new Exception("Root element is not Bookmark.");
+                throw new InvalidOperationException(message: "Root element is not Bookmark.");
             }
 
             _foundRoot = true;
         }
 
-        if (tag.Equals("xfdf"))
+        if (tag.Equals(value: "xfdf", StringComparison.Ordinal))
         {
         }
-        else if (tag.Equals("f"))
+        else if (tag.Equals(value: "f", StringComparison.Ordinal))
         {
-            fileSpec = h["href"];
+            fileSpec = h[key: "href"];
         }
-        else if (tag.Equals("fields"))
+        else if (tag.Equals(value: "fields", StringComparison.Ordinal))
         {
             fields = new NullValueDictionary<string, string>(); // init it!
             ListFields = new NullValueDictionary<string, List<string>>();
         }
-        else if (tag.Equals("field"))
+        else if (tag.Equals(value: "field", StringComparison.Ordinal))
         {
-            var fName = h["name"];
+            var fName = h[key: "name"];
             _fieldNames.Push(fName);
         }
-        else if (tag.Equals("value"))
+        else if (tag.Equals(value: "value", StringComparison.Ordinal))
         {
-            _fieldValues.Push("");
+            _fieldValues.Push(obj: "");
         }
     }
 
@@ -214,6 +231,7 @@ public class XfdfReader : ISimpleXmlDocHandler
     public string GetFieldValue(string name)
     {
         var field = fields[name];
+
         if (field == null)
         {
             return null;
@@ -237,17 +255,15 @@ public class XfdfReader : ISimpleXmlDocHandler
         {
             if (Count == 0)
             {
-                throw new InvalidOperationException("The stack is empty.");
+                throw new InvalidOperationException(message: "The stack is empty.");
             }
 
             var obj = this[Count - 1];
             RemoveAt(Count - 1);
+
             return obj;
         }
 
-        internal void Push(string obj)
-        {
-            Add(obj);
-        }
+        internal void Push(string obj) => Add(obj);
     }
 }

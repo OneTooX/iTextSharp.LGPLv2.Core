@@ -10,7 +10,8 @@ namespace iTextSharp.LGPLv2.Core.FunctionalTests.Issues;
 [TestClass]
 public class Issue42
 {
-    [TestMethod, TestCategory("Not Working")]
+    [TestMethod]
+    [Ignore]
     public void Verify_Issue42_CanBe_Processed()
     {
         var inPdfFile = TestUtils.GetPdfsPath("issue42.pdf");

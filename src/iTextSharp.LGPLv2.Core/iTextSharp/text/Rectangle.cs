@@ -7,10 +7,6 @@ namespace iTextSharp.text;
 /// <summary>
 ///     A Rectangle is the representation of a geometric figure.
 /// </summary>
-/// <seealso cref="T:iTextSharp.text.Element" />
-/// <seealso cref="T:iTextSharp.text.Table" />
-/// <seealso cref="T:iTextSharp.text.Cell" />
-/// <seealso cref="T:iTextSharp.text.HeaderFooter" />
 public class Rectangle : Element, IElement
 {
     /// <summary>
@@ -135,7 +131,7 @@ public class Rectangle : Element, IElement
     /// </summary>
     /// <param name="urx">upper right x</param>
     /// <param name="ury">upper right y</param>
-    public Rectangle(float urx, float ury) : this(0, 0, urx, ury)
+    public Rectangle(float urx, float ury) : this(llx: 0, lly: 0, urx, ury)
     {
     }
 
@@ -143,10 +139,9 @@ public class Rectangle : Element, IElement
     ///     Constructs a Rectangle-object.
     /// </summary>
     /// <param name="rect">another Rectangle</param>
-    public Rectangle(Rectangle rect) : this(rect.Llx, rect.Lly, rect.Urx, rect.Ury)
-    {
-        CloneNonPositionParameters(rect);
-    }
+    public Rectangle(Rectangle rect) : this(rect?.Llx ?? throw new ArgumentNullException(nameof(rect)), rect.Lly,
+        rect.Urx, rect.Ury)
+        => CloneNonPositionParameters(rect);
 
     /// <summary>
     ///     Gets the backgroundcolor.
@@ -309,9 +304,9 @@ public class Rectangle : Element, IElement
     {
         get
         {
-            if (backgroundColor is GrayColor)
+            if (backgroundColor is GrayColor grayColor)
             {
-                return ((GrayColor)backgroundColor).Gray;
+                return grayColor.Gray;
             }
 
             return 0;
@@ -384,7 +379,7 @@ public class Rectangle : Element, IElement
     public virtual float Width
     {
         get => Urx - Llx;
-        set => throw new InvalidOperationException("The width cannot be set.");
+        set => throw new InvalidOperationException(message: "The width cannot be set.");
     }
 
     /// <summary>
@@ -419,6 +414,11 @@ public class Rectangle : Element, IElement
     /// <returns>true if the element was processed successfully</returns>
     public virtual bool Process(IElementListener listener)
     {
+        if (listener == null)
+        {
+            throw new ArgumentNullException(nameof(listener));
+        }
+
         try
         {
             return listener.Add(this);
@@ -437,18 +437,24 @@ public class Rectangle : Element, IElement
     /// </summary>
     public override string ToString()
     {
-        var buf = new StringBuilder("Rectangle: ");
+        var buf = new StringBuilder(value: "Rectangle: ");
         buf.Append(Width);
-        buf.Append('x');
+        buf.Append(value: 'x');
         buf.Append(Height);
-        buf.Append(" (rot: ");
+        buf.Append(value: " (rot: ");
         buf.Append(rotation);
-        buf.Append(" degrees)");
+        buf.Append(value: " degrees)");
+
         return buf.ToString();
     }
 
     public virtual void CloneNonPositionParameters(Rectangle rect)
     {
+        if (rect == null)
+        {
+            throw new ArgumentNullException(nameof(rect));
+        }
+
         rotation = rect.rotation;
         border = rect.border;
         borderWidth = rect.borderWidth;
@@ -464,7 +470,6 @@ public class Rectangle : Element, IElement
         borderWidthBottom = rect.borderWidthBottom;
         useVariableBorders = rect.useVariableBorders;
     }
-
 
     /// <summary>
     ///     Disables the border on the specified side.
@@ -522,6 +527,7 @@ public class Rectangle : Element, IElement
     public Rectangle GetRectangle(float top, float bottom)
     {
         var tmp = new Rectangle(this);
+
         if (Top > top)
         {
             tmp.Top = top;
@@ -578,8 +584,8 @@ public class Rectangle : Element, IElement
             case NO_BORDER:
                 return false;
             default:
-                return borderWidth > 0 || borderWidthLeft > 0
-                                       || borderWidthRight > 0 || borderWidthTop > 0 || borderWidthBottom > 0;
+                return borderWidth > 0 || borderWidthLeft > 0 || borderWidthRight > 0 || borderWidthTop > 0 ||
+                       borderWidthBottom > 0;
         }
     }
 
@@ -618,11 +624,17 @@ public class Rectangle : Element, IElement
         var rect = new Rectangle(Lly, Llx, Ury, Urx);
         rect.rotation = rotation + 90;
         rect.rotation %= 360;
+
         return rect;
     }
 
     public virtual void SoftCloneNonPositionParameters(Rectangle rect)
     {
+        if (rect == null)
+        {
+            throw new ArgumentNullException(nameof(rect));
+        }
+
         if (rect.rotation != 0)
         {
             rotation = rect.rotation;
@@ -707,6 +719,7 @@ public class Rectangle : Element, IElement
     private void updateBorderBasedOnWidth(float width, int side)
     {
         useVariableBorders = true;
+
         if (width > 0)
         {
             EnableBorderSide(side);

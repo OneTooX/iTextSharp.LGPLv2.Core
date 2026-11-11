@@ -51,7 +51,7 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <overloads>
     ///     Has nine overloads.
     /// </overloads>
-    public Phrase() : this(16)
+    public Phrase() : this(leading: 16)
     {
     }
 
@@ -60,6 +60,11 @@ public class Phrase : List<IElement>, ITextElementArray
     /// </summary>
     public Phrase(Phrase phrase)
     {
+        if (phrase == null)
+        {
+            throw new ArgumentNullException(nameof(phrase));
+        }
+
         AddAll(phrase);
         leading = phrase.Leading;
         font = phrase.Font;
@@ -82,6 +87,11 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <param name="chunk">a Chunk</param>
     public Phrase(Chunk chunk)
     {
+        if (chunk == null)
+        {
+            throw new ArgumentNullException(nameof(chunk));
+        }
+
         base.Add(chunk);
         font = chunk.Font;
         hyphenation = chunk.GetHyphenation();
@@ -94,6 +104,11 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <param name="chunk">a Chunk</param>
     public Phrase(float leading, Chunk chunk)
     {
+        if (chunk == null)
+        {
+            throw new ArgumentNullException(nameof(chunk));
+        }
+
         this.leading = leading;
         base.Add(chunk);
         font = chunk.Font;
@@ -130,6 +145,7 @@ public class Phrase : List<IElement>, ITextElementArray
     {
         this.leading = leading;
         this.font = font;
+
         /* bugfix by August Detlefsen */
         if (!string.IsNullOrEmpty(str))
         {
@@ -158,6 +174,7 @@ public class Phrase : List<IElement>, ITextElementArray
         get
         {
             var buf = new StringBuilder();
+
             foreach (object obj in Chunks)
             {
                 buf.Append(obj);
@@ -197,7 +214,7 @@ public class Phrase : List<IElement>, ITextElementArray
         {
             if (float.IsNaN(leading) && font != null)
             {
-                return font.GetCalculatedLeading(1.5f);
+                return font.GetCalculatedLeading(linespacing: 1.5f);
             }
 
             return leading;
@@ -215,6 +232,7 @@ public class Phrase : List<IElement>, ITextElementArray
         get
         {
             var tmp = new List<Chunk>();
+
             foreach (var ele in this)
             {
                 tmp.AddRange(ele.Chunks);
@@ -250,6 +268,11 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <returns>true if the element was processed successfully</returns>
     public virtual bool Process(IElementListener listener)
     {
+        if (listener == null)
+        {
+            throw new ArgumentNullException(nameof(listener));
+        }
+
         try
         {
             foreach (var ele in this)
@@ -284,12 +307,14 @@ public class Phrase : List<IElement>, ITextElementArray
         if (o is IRtfElementInterface)
         {
             base.Add(o);
+
             return true;
         }
 
         try
         {
             var element = o;
+
             switch (element.Type)
             {
                 case Element.CHUNK:
@@ -298,11 +323,12 @@ public class Phrase : List<IElement>, ITextElementArray
                 case Element.PARAGRAPH:
                     var phrase = (Phrase)o;
                     var success = true;
+
                     foreach (var e in phrase)
                     {
-                        if (e is Chunk)
+                        if (e is Chunk chunk)
                         {
-                            success &= AddChunk((Chunk)e);
+                            success &= AddChunk(chunk);
                         }
                         else
                         {
@@ -320,14 +346,15 @@ public class Phrase : List<IElement>, ITextElementArray
                 case Element.LIST:
                 case Element.YMARK:
                     base.Add(o);
+
                     return true;
                 default:
-                    throw new Exception(element.Type.ToString());
+                    throw new InvalidOperationException(element.Type.ToString(CultureInfo.InvariantCulture));
             }
         }
         catch (Exception cce)
         {
-            throw new Exception("Insertion of illegal Element: " + cce.Message);
+            throw new InvalidOperationException("Insertion of illegal Element: " + cce.Message);
         }
     }
 
@@ -336,7 +363,7 @@ public class Phrase : List<IElement>, ITextElementArray
     /// </summary>
     /// <param name="str"></param>
     /// <returns>a newly constructed Phrase</returns>
-    public static Phrase GetInstance(string str) => GetInstance(16, str, new Font());
+    public static Phrase GetInstance(string str) => GetInstance(leading: 16, str, new Font());
 
     /// <summary>
     ///     Gets a special kind of Phrase that changes some characters into corresponding symbols.
@@ -355,29 +382,42 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <returns>a newly constructed Phrase</returns>
     public static Phrase GetInstance(int leading, string str, Font font)
     {
-        var p = new Phrase(true);
+        if (str == null)
+        {
+            throw new ArgumentNullException(nameof(str));
+        }
+
+        if (font == null)
+        {
+            throw new ArgumentNullException(nameof(font));
+        }
+
+        var p = new Phrase(dummy: true);
         p.Leading = leading;
         p.font = font;
+
         if (font.Family != Font.SYMBOL && font.Family != Font.ZAPFDINGBATS && font.BaseFont == null)
         {
             int index;
+
             while ((index = SpecialSymbol.Index(str)) > -1)
             {
                 if (index > 0)
                 {
-                    var firstPart = str.Substring(0, index);
+                    var firstPart = str.Substring(startIndex: 0, index);
                     p.Add(new Chunk(firstPart, font));
                     str = str.Substring(index);
                 }
 
                 var symbol = new Font(Font.SYMBOL, font.Size, font.Style, font.Color);
                 var buf = new StringBuilder();
-                buf.Append(SpecialSymbol.GetCorrespondingSymbol(str[0]));
-                str = str.Substring(1);
+                buf.Append(SpecialSymbol.GetCorrespondingSymbol(str[index: 0]));
+                str = str.Substring(startIndex: 1);
+
                 while (SpecialSymbol.Index(str) == 0)
                 {
-                    buf.Append(SpecialSymbol.GetCorrespondingSymbol(str[0]));
-                    str = str.Substring(1);
+                    buf.Append(SpecialSymbol.GetCorrespondingSymbol(str[index: 0]));
+                    str = str.Substring(startIndex: 1);
                 }
 
                 p.Add(new Chunk(buf.ToString(), symbol));
@@ -397,7 +437,7 @@ public class Phrase : List<IElement>, ITextElementArray
     /// </summary>
     /// <param name="tag">the given tag</param>
     /// <returns>true if the tag corresponds</returns>
-    public static bool IsTag(string tag) => ElementTags.PHRASE.Equals(tag);
+    public static bool IsTag(string tag) => ElementTags.PHRASE.Equals(tag, StringComparison.Ordinal);
 
     /// <summary>
     ///     Adds a Chunk, an Anchor or another Phrase
@@ -415,9 +455,11 @@ public class Phrase : List<IElement>, ITextElementArray
         try
         {
             var element = (IElement)o;
+
             if (element.Type == Element.CHUNK)
             {
                 var chunk = (Chunk)element;
+
                 if (!font.IsStandardFont())
                 {
                     chunk.Font = font.Difference(chunk.Font);
@@ -430,23 +472,21 @@ public class Phrase : List<IElement>, ITextElementArray
 
                 Insert(index, chunk);
             }
-            else if (element.Type == Element.PHRASE ||
-                     element.Type == Element.ANCHOR ||
+            else if (element.Type == Element.PHRASE || element.Type == Element.ANCHOR ||
                      element.Type == Element.ANNOTATION ||
                      element.Type == Element.TABLE || // line added by David Freels
-                     element.Type == Element.YMARK ||
-                     element.Type == Element.MARKED)
+                     element.Type == Element.YMARK || element.Type == Element.MARKED)
             {
                 Insert(index, element);
             }
             else
             {
-                throw new Exception(element.Type.ToString());
+                throw new InvalidOperationException(element.Type.ToString(CultureInfo.InvariantCulture));
             }
         }
         catch (Exception cce)
         {
-            throw new Exception("Insertion of illegal Element: " + cce.Message);
+            throw new InvalidOperationException("Insertion of illegal Element: " + cce.Message);
         }
     }
 
@@ -456,8 +496,14 @@ public class Phrase : List<IElement>, ITextElementArray
     /// </summary>
     /// <param name="collection">a collection of Chunks, Anchors and Phrases.</param>
     /// <returns>true if the action succeeded, false if not.</returns>
-    public bool AddAll<T>(ICollection<T> collection) where T : IElement
+    public bool AddAll<T>(ICollection<T> collection)
+        where T : IElement
     {
+        if (collection == null)
+        {
+            throw new ArgumentNullException(nameof(collection));
+        }
+
         if (collection.Count == 0)
         {
             return false;
@@ -475,10 +521,7 @@ public class Phrase : List<IElement>, ITextElementArray
     ///     Adds a Object to the Paragraph.
     /// </summary>
     /// <param name="obj">the object to add.</param>
-    public void AddSpecial(IElement obj)
-    {
-        base.Add(obj);
-    }
+    public void AddSpecial(IElement obj) => base.Add(obj);
 
     public bool HasLeading()
     {
@@ -504,7 +547,8 @@ public class Phrase : List<IElement>, ITextElementArray
             case 0:
                 return true;
             case 1:
-                var element = this[0];
+                var element = this[index: 0];
+
                 if (element.Type == Element.CHUNK && ((Chunk)element).IsEmpty())
                 {
                     return true;
@@ -527,8 +571,14 @@ public class Phrase : List<IElement>, ITextElementArray
     /// <returns>a bool</returns>
     protected bool AddChunk(Chunk chunk)
     {
+        if (chunk == null)
+        {
+            throw new ArgumentNullException(nameof(chunk));
+        }
+
         var f = chunk.Font;
         var c = chunk.Content;
+
         if (font != null && !font.IsStandardFont())
         {
             f = font.Difference(chunk.Font);
@@ -539,14 +589,13 @@ public class Phrase : List<IElement>, ITextElementArray
             try
             {
                 var previous = (Chunk)this[Count - 1];
-                if (!previous.HasAttributes()
-                    && (f == null
-                        || f.CompareTo(previous.Font) == 0)
-                    && previous.Font.CompareTo(f) == 0
-                    && !"".Equals(previous.Content.Trim())
-                    && !"".Equals(c.Trim()))
+
+                if (!previous.HasAttributes() && (f == null || f.CompareTo(previous.Font) == 0) &&
+                    previous.Font.CompareTo(f) == 0 && !"".Equals(previous.Content.Trim(), StringComparison.Ordinal) &&
+                    !"".Equals(c.Trim(), StringComparison.Ordinal))
                 {
                     previous.Append(c);
+
                     return true;
                 }
             }
@@ -557,12 +606,14 @@ public class Phrase : List<IElement>, ITextElementArray
 
         var newChunk = new Chunk(c, f);
         newChunk.Attributes = chunk.Attributes;
+
         if (hyphenation != null && newChunk.GetHyphenation() == null && !newChunk.IsEmpty())
         {
             newChunk.SetHyphenation(hyphenation);
         }
 
         base.Add(newChunk);
+
         return true;
     }
 }

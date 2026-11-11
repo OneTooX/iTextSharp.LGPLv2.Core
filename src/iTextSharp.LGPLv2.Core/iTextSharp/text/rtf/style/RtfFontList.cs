@@ -12,17 +12,17 @@ public class RtfFontList : RtfElement, IRtfExtendedElement
     /// <summary>
     ///     Constant for the font number
     /// </summary>
-    public static readonly byte[] FontNumber = DocWriter.GetIsoBytes("\\f");
+    public static readonly byte[] FontNumber = DocWriter.GetIsoBytes(text: "\\f");
 
     /// <summary>
     ///     Constant for the default font
     /// </summary>
-    private static readonly byte[] _defaultFont = DocWriter.GetIsoBytes("\\deff");
+    private static readonly byte[] _defaultFont = DocWriter.GetIsoBytes(text: "\\deff");
 
     /// <summary>
     ///     Constant for the font table
     /// </summary>
-    private static readonly byte[] _fontTable = DocWriter.GetIsoBytes("\\fonttbl");
+    private static readonly byte[] _fontTable = DocWriter.GetIsoBytes(text: "\\fonttbl");
 
     /// <summary>
     ///     The list of fonts
@@ -33,10 +33,7 @@ public class RtfFontList : RtfElement, IRtfExtendedElement
     ///     Creates a RtfFontList
     /// </summary>
     /// <param name="doc">The RtfDocument this RtfFontList belongs to</param>
-    public RtfFontList(RtfDocument doc) : base(doc)
-    {
-        _fontList.Add(new RtfFont(Document, 0));
-    }
+    public RtfFontList(RtfDocument doc) : base(doc) => _fontList.Add(new RtfFont(Document, fontNumber: 0));
 
     /// <summary>
     ///     unused
@@ -48,26 +45,32 @@ public class RtfFontList : RtfElement, IRtfExtendedElement
     /// <summary>
     ///     Writes the definition of the font list
     /// </summary>
-    public virtual void WriteDefinition(Stream result)
+    public virtual void WriteDefinition(Stream outp)
     {
-        byte[] t;
-        result.Write(_defaultFont, 0, _defaultFont.Length);
-        result.Write(t = IntToByteArray(0), 0, t.Length);
-        result.Write(OpenGroup, 0, OpenGroup.Length);
-        result.Write(_fontTable, 0, _fontTable.Length);
-        for (var i = 0; i < _fontList.Count; i++)
+        if (outp == null)
         {
-            result.Write(OpenGroup, 0, OpenGroup.Length);
-            result.Write(FontNumber, 0, FontNumber.Length);
-            result.Write(t = IntToByteArray(i), 0, t.Length);
-            var rf = _fontList[i];
-            rf.WriteDefinition(result);
-            result.Write(CommaDelimiter, 0, CommaDelimiter.Length);
-            result.Write(CloseGroup, 0, CloseGroup.Length);
+            throw new ArgumentNullException(nameof(outp));
         }
 
-        result.Write(CloseGroup, 0, CloseGroup.Length);
-        Document.OutputDebugLinebreak(result);
+        byte[] t;
+        outp.Write(_defaultFont, offset: 0, _defaultFont.Length);
+        outp.Write(t = IntToByteArray(i: 0), offset: 0, t.Length);
+        outp.Write(OpenGroup, offset: 0, OpenGroup.Length);
+        outp.Write(_fontTable, offset: 0, _fontTable.Length);
+
+        for (var i = 0; i < _fontList.Count; i++)
+        {
+            outp.Write(OpenGroup, offset: 0, OpenGroup.Length);
+            outp.Write(FontNumber, offset: 0, FontNumber.Length);
+            outp.Write(t = IntToByteArray(i), offset: 0, t.Length);
+            var rf = _fontList[i];
+            rf.WriteDefinition(outp);
+            outp.Write(CommaDelimiter, offset: 0, CommaDelimiter.Length);
+            outp.Write(CloseGroup, offset: 0, CloseGroup.Length);
+        }
+
+        outp.Write(CloseGroup, offset: 0, CloseGroup.Length);
+        Document.OutputDebugLinebreak(outp);
     }
 
     /// <summary>
@@ -78,12 +81,13 @@ public class RtfFontList : RtfElement, IRtfExtendedElement
     /// <returns>The index of the font</returns>
     public int GetFontNumber(RtfFont font)
     {
-        if (font is RtfParagraphStyle)
+        if (font is RtfParagraphStyle style)
         {
-            font = new RtfFont(Document, (RtfParagraphStyle)font);
+            font = new RtfFont(Document, style);
         }
 
         var fontIndex = -1;
+
         for (var i = 0; i < _fontList.Count; i++)
         {
             if (_fontList[i].Equals(font))

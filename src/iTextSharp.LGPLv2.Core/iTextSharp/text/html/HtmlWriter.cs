@@ -39,12 +39,12 @@ public class HtmlWriter : DocWriter
     /// <summary>
     ///     This is a possible HTML-tag.
     /// </summary>
-    public static byte[] Begincomment = GetIsoBytes("<!-- ");
+    public static byte[] Begincomment = GetIsoBytes(text: "<!-- ");
 
     /// <summary>
     ///     This is a possible HTML-tag.
     /// </summary>
-    public static byte[] Endcomment = GetIsoBytes(" -->");
+    public static byte[] Endcomment = GetIsoBytes(text: " -->");
 
     /// <summary>
     ///     membervariables
@@ -94,17 +94,22 @@ public class HtmlWriter : DocWriter
     /// <param name="os">The  Stream  the writer has to write to.</param>
     protected HtmlWriter(Document doc, Stream os) : base(doc, os)
     {
+        if (os == null)
+        {
+            throw new ArgumentNullException(nameof(os));
+        }
+
         Document.AddDocListener(this);
         PageN = Document.PageNumber;
         os.WriteByte(LT);
         var tmp = GetIsoBytes(HtmlTags.HTML);
-        os.Write(tmp, 0, tmp.Length);
+        os.Write(tmp, offset: 0, tmp.Length);
         os.WriteByte(GT);
         os.WriteByte(NEWLINE);
         os.WriteByte(TAB);
         os.WriteByte(LT);
         tmp = GetIsoBytes(HtmlTags.HEAD);
-        os.Write(tmp, 0, tmp.Length);
+        os.Write(tmp, offset: 0, tmp.Length);
         os.WriteByte(GT);
     }
 
@@ -129,6 +134,11 @@ public class HtmlWriter : DocWriter
     /// <returns> true  if this action succeeded,  false  if not.</returns>
     public override bool Add(IElement element)
     {
+        if (element == null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
         if (pause)
         {
             return false;
@@ -136,7 +146,7 @@ public class HtmlWriter : DocWriter
 
         if (open && !element.IsContent())
         {
-            throw new DocumentException("The document is open; you can only add Elements with content.");
+            throw new DocumentException(message: "The document is open; you can only add Elements with content.");
         }
 
         switch (element.Type)
@@ -145,11 +155,12 @@ public class HtmlWriter : DocWriter
                 try
                 {
                     var h = (Header)element;
-                    if (HtmlTags.STYLESHEET.Equals(h.Name))
+
+                    if (HtmlTags.STYLESHEET.Equals(h.Name, StringComparison.OrdinalIgnoreCase))
                     {
                         WriteLink(h);
                     }
-                    else if (HtmlTags.JAVASCRIPT.Equals(h.Name))
+                    else if (HtmlTags.JAVASCRIPT.Equals(h.Name, StringComparison.OrdinalIgnoreCase))
                     {
                         WriteJavaScript(h);
                     }
@@ -168,34 +179,39 @@ public class HtmlWriter : DocWriter
             case Element.AUTHOR:
                 var meta = (Meta)element;
                 WriteHeader(meta);
+
                 return true;
             case Element.TITLE:
-                AddTabs(2);
+                AddTabs(indent: 2);
                 WriteStart(HtmlTags.TITLE);
                 Os.WriteByte(GT);
-                AddTabs(3);
+                AddTabs(indent: 3);
                 Write(HtmlEncoder.Encode(((Meta)element).Content));
-                AddTabs(2);
+                AddTabs(indent: 2);
                 WriteEnd(HtmlTags.TITLE);
+
                 return true;
             case Element.CREATOR:
                 WriteComment("Creator: " + HtmlEncoder.Encode(((Meta)element).Content));
+
                 return true;
             case Element.PRODUCER:
                 WriteComment("Producer: " + HtmlEncoder.Encode(((Meta)element).Content));
+
                 return true;
             case Element.CREATIONDATE:
                 WriteComment("Creationdate: " + HtmlEncoder.Encode(((Meta)element).Content));
+
                 return true;
             case Element.MARKED:
-                if (element is MarkedSection)
+                if (element is MarkedSection ms)
                 {
-                    var ms = (MarkedSection)element;
-                    AddTabs(1);
+                    AddTabs(indent: 1);
                     WriteStart(HtmlTags.DIV);
                     WriteMarkupAttributes(ms.MarkupAttributes);
                     Os.WriteByte(GT);
-                    var mo = ((MarkedSection)element).Title;
+                    var mo = ms.Title;
+
                     if (mo != null)
                     {
                         Markup = mo.MarkupAttributes;
@@ -204,16 +220,19 @@ public class HtmlWriter : DocWriter
 
                     ms.Process(this);
                     WriteEnd(HtmlTags.DIV);
+
                     return true;
                 }
                 else
                 {
                     var mo = (MarkedObject)element;
                     Markup = mo.MarkupAttributes;
+
                     return mo.Process(this);
                 }
             default:
-                Write(element, 2);
+                Write(element, indent: 2);
+
                 return true;
         }
     }
@@ -226,13 +245,14 @@ public class HtmlWriter : DocWriter
         }
 
         Write(str);
+
         return true;
     }
 
     public override void Close()
     {
         InitFooter(); // line added by David Freels
-        AddTabs(1);
+        AddTabs(indent: 1);
         WriteEnd(HtmlTags.BODY);
         Os.WriteByte(NEWLINE);
         WriteEnd(HtmlTags.HTML);
@@ -244,6 +264,7 @@ public class HtmlWriter : DocWriter
         try
         {
             var cFont = Currentfont.Peek();
+
             if (cFont.CompareTo(font) == 0)
             {
                 return false;
@@ -267,11 +288,11 @@ public class HtmlWriter : DocWriter
         try
         {
             WriteStart(HtmlTags.DIV);
-            Write(" ");
+            Write(str: " ");
             Write(HtmlTags.STYLE);
-            Write("=\"");
+            Write(str: "=\"");
             WriteCssProperty(html.Markup.CSS_KEY_PAGE_BREAK_BEFORE, html.Markup.CSS_VALUE_ALWAYS);
-            Write("\" /");
+            Write(str: "\" /");
             Os.WriteByte(GT);
         }
         catch (IOException ioe)
@@ -297,10 +318,11 @@ public class HtmlWriter : DocWriter
         base.Open();
         WriteComment(Document.Version);
         WriteComment("CreationDate: " + DateTime.Now);
-        AddTabs(1);
+        AddTabs(indent: 1);
         WriteEnd(HtmlTags.HEAD);
-        AddTabs(1);
+        AddTabs(indent: 1);
         WriteStart(HtmlTags.BODY);
+
         if (Document.LeftMargin > 0)
         {
             Write(HtmlTags.LEFTMARGIN, Document.LeftMargin.ToString(CultureInfo.InvariantCulture));
@@ -355,30 +377,15 @@ public class HtmlWriter : DocWriter
     /// <summary>
     ///     Adds the header to the top of the  Document
     /// </summary>
-    public void ResetImagepath()
-    {
-        Imagepath = null;
-    }
+    public void ResetImagepath() => Imagepath = null;
 
-    public void SetFooter(HeaderFooter footer)
-    {
-        this.footer = footer;
-    }
+    public void SetFooter(HeaderFooter footer) => this.footer = footer;
 
-    public void SetHeader(HeaderFooter header)
-    {
-        this.header = header;
-    }
+    public void SetHeader(HeaderFooter header) => this.header = header;
 
-    public void SetImagepath(string imagepath)
-    {
-        Imagepath = imagepath;
-    }
+    public void SetImagepath(string imagepath) => Imagepath = imagepath;
 
-    public void SetStandardFont(Font standardFont)
-    {
-        Standardfont = standardFont;
-    }
+    public void SetStandardFont(Font standardFont) => Standardfont = standardFont;
 
     protected void InitFooter()
     {
@@ -405,7 +412,13 @@ public class HtmlWriter : DocWriter
     /// </summary>
     protected void Write(IElement element, int indent)
     {
+        if (element == null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
         Properties styleAttributes = null;
+
         switch (element.Type)
         {
             case Element.MARKED:
@@ -423,11 +436,14 @@ public class HtmlWriter : DocWriter
             case Element.CHUNK:
             {
                 var chunk = (Chunk)element;
+
                 // if the chunk contains an image, return the image representation
                 var image = chunk.GetImage();
+
                 if (image != null)
                 {
                     Write(image, indent);
+
                     return;
                 }
 
@@ -437,20 +453,23 @@ public class HtmlWriter : DocWriter
                 }
 
                 var attributes = chunk.Attributes;
+
                 if (attributes != null && attributes[Chunk.NEWPAGE] != null)
                 {
                     return;
                 }
 
                 var tag = IsOtherFont(chunk.Font) || Markup.Count > 0;
+
                 if (tag)
                 {
                     // start span tag
                     AddTabs(indent);
                     WriteStart(HtmlTags.SPAN);
+
                     if (IsOtherFont(chunk.Font))
                     {
-                        Write(chunk.Font, null);
+                        Write(chunk.Font, styleAttributes: null);
                     }
 
                     WriteMarkupAttributes(Markup);
@@ -474,11 +493,13 @@ public class HtmlWriter : DocWriter
 
                 // contents
                 Write(HtmlEncoder.Encode(chunk.Content));
+
                 if (attributes != null && attributes[Chunk.SUBSUPSCRIPT] != null)
                 {
                     // end sup or sub tag
                     Os.WriteByte(LT);
                     Os.WriteByte(FORWARD);
+
                     if ((float)attributes[Chunk.SUBSUPSCRIPT] > 0)
                     {
                         Write(HtmlTags.SUP);
@@ -503,6 +524,7 @@ public class HtmlWriter : DocWriter
             {
                 var phrase = (Phrase)element;
                 styleAttributes = new Properties();
+
                 if (phrase.HasLeading())
                 {
                     styleAttributes[html.Markup.CSS_KEY_LINEHEIGHT] = phrase.Leading + "pt";
@@ -515,6 +537,7 @@ public class HtmlWriter : DocWriter
                 Write(phrase.Font, styleAttributes);
                 Os.WriteByte(GT);
                 Currentfont.Push(phrase.Font);
+
                 // contents
                 foreach (var i in phrase)
                 {
@@ -525,12 +548,14 @@ public class HtmlWriter : DocWriter
                 AddTabs(indent);
                 WriteEnd(html.Markup.HTML_TAG_SPAN);
                 Currentfont.Pop();
+
                 return;
             }
             case Element.ANCHOR:
             {
                 var anchor = (Anchor)element;
                 styleAttributes = new Properties();
+
                 if (anchor.HasLeading())
                 {
                     styleAttributes[html.Markup.CSS_KEY_LINEHEIGHT] = anchor.Leading + "pt";
@@ -539,6 +564,7 @@ public class HtmlWriter : DocWriter
                 // start tag
                 AddTabs(indent);
                 WriteStart(HtmlTags.ANCHOR);
+
                 if (anchor.Name != null)
                 {
                     Write(HtmlTags.NAME, anchor.Name);
@@ -553,6 +579,7 @@ public class HtmlWriter : DocWriter
                 Write(anchor.Font, styleAttributes);
                 Os.WriteByte(GT);
                 Currentfont.Push(anchor.Font);
+
                 // contents
                 foreach (var i in anchor)
                 {
@@ -563,12 +590,14 @@ public class HtmlWriter : DocWriter
                 AddTabs(indent);
                 WriteEnd(HtmlTags.ANCHOR);
                 Currentfont.Pop();
+
                 return;
             }
             case Element.PARAGRAPH:
             {
                 var paragraph = (Paragraph)element;
                 styleAttributes = new Properties();
+
                 if (paragraph.HasLeading())
                 {
                     styleAttributes[html.Markup.CSS_KEY_LINEHEIGHT] = paragraph.TotalLeading + "pt";
@@ -579,7 +608,8 @@ public class HtmlWriter : DocWriter
                 WriteStart(HtmlTags.DIV);
                 WriteMarkupAttributes(Markup);
                 var alignment = HtmlEncoder.GetAlignment(paragraph.Alignment);
-                if (!"".Equals(alignment))
+
+                if (!"".Equals(alignment, StringComparison.OrdinalIgnoreCase))
                 {
                     Write(HtmlTags.ALIGN, alignment);
                 }
@@ -587,6 +617,7 @@ public class HtmlWriter : DocWriter
                 Write(paragraph.Font, styleAttributes);
                 Os.WriteByte(GT);
                 Currentfont.Push(paragraph.Font);
+
                 // contents
                 foreach (var i in paragraph)
                 {
@@ -597,6 +628,7 @@ public class HtmlWriter : DocWriter
                 AddTabs(indent);
                 WriteEnd(HtmlTags.DIV);
                 Currentfont.Pop();
+
                 return;
             }
             case Element.SECTION:
@@ -604,13 +636,16 @@ public class HtmlWriter : DocWriter
             {
                 // part of the start tag + contents
                 WriteSection((Section)element, indent);
+
                 return;
             }
             case Element.LIST:
             {
                 var list = (List)element;
+
                 // start tag
                 AddTabs(indent);
+
                 if (list.Numbered)
                 {
                     WriteStart(HtmlTags.ORDEREDLIST);
@@ -622,14 +657,16 @@ public class HtmlWriter : DocWriter
 
                 WriteMarkupAttributes(Markup);
                 Os.WriteByte(GT);
+
                 // contents
-                foreach (IElement i in list.Items)
+                foreach (var i in list.Items)
                 {
                     Write(i, indent + 1);
                 }
 
                 // end tag
                 AddTabs(indent);
+
                 if (list.Numbered)
                 {
                     WriteEnd(HtmlTags.ORDEREDLIST);
@@ -645,6 +682,7 @@ public class HtmlWriter : DocWriter
             {
                 var listItem = (ListItem)element;
                 styleAttributes = new Properties();
+
                 if (listItem.HasLeading())
                 {
                     styleAttributes[html.Markup.CSS_KEY_LINEHEIGHT] = listItem.TotalLeading + "pt";
@@ -657,6 +695,7 @@ public class HtmlWriter : DocWriter
                 Write(listItem.Font, styleAttributes);
                 Os.WriteByte(GT);
                 Currentfont.Push(listItem.Font);
+
                 // contents
                 foreach (var i in listItem)
                 {
@@ -667,6 +706,7 @@ public class HtmlWriter : DocWriter
                 AddTabs(indent);
                 WriteEnd(HtmlTags.LISTITEM);
                 Currentfont.Pop();
+
                 return;
             }
             case Element.CELL:
@@ -675,6 +715,7 @@ public class HtmlWriter : DocWriter
 
                 // start tag
                 AddTabs(indent);
+
                 if (cell.Header)
                 {
                     WriteStart(HtmlTags.HEADERCELL);
@@ -685,6 +726,7 @@ public class HtmlWriter : DocWriter
                 }
 
                 WriteMarkupAttributes(Markup);
+
                 if (cell.BorderWidth.ApproxNotEqual(Rectangle.UNDEFINED))
                 {
                     Write(HtmlTags.BORDERWIDTH, cell.BorderWidth.ToString(CultureInfo.InvariantCulture));
@@ -701,13 +743,15 @@ public class HtmlWriter : DocWriter
                 }
 
                 var alignment = HtmlEncoder.GetAlignment(cell.HorizontalAlignment);
-                if (!"".Equals(alignment))
+
+                if (!"".Equals(alignment, StringComparison.OrdinalIgnoreCase))
                 {
                     Write(HtmlTags.HORIZONTALALIGN, alignment);
                 }
 
                 alignment = HtmlEncoder.GetAlignment(cell.VerticalAlignment);
-                if (!"".Equals(alignment))
+
+                if (!"".Equals(alignment, StringComparison.OrdinalIgnoreCase))
                 {
                     Write(HtmlTags.VERTICALALIGN, alignment);
                 }
@@ -719,20 +763,21 @@ public class HtmlWriter : DocWriter
 
                 if (cell.Colspan != 1)
                 {
-                    Write(HtmlTags.COLSPAN, cell.Colspan.ToString());
+                    Write(HtmlTags.COLSPAN, cell.Colspan.ToString(CultureInfo.InvariantCulture));
                 }
 
                 if (cell.Rowspan != 1)
                 {
-                    Write(HtmlTags.ROWSPAN, cell.Rowspan.ToString());
+                    Write(HtmlTags.ROWSPAN, cell.Rowspan.ToString(CultureInfo.InvariantCulture));
                 }
 
                 if (cell.MaxLines == 1)
                 {
-                    Write(HtmlTags.STYLE, "white-space: nowrap;");
+                    Write(HtmlTags.STYLE, value: "white-space: nowrap;");
                 }
 
                 Os.WriteByte(GT);
+
                 // contents
                 if (cell.IsEmpty())
                 {
@@ -740,7 +785,7 @@ public class HtmlWriter : DocWriter
                 }
                 else
                 {
-                    foreach (IElement i in cell.Elements)
+                    foreach (var i in cell.Elements)
                     {
                         Write(i, indent + 1);
                     }
@@ -748,6 +793,7 @@ public class HtmlWriter : DocWriter
 
                 // end tag
                 AddTabs(indent);
+
                 if (cell.Header)
                 {
                     WriteEnd(HtmlTags.HEADERCELL);
@@ -768,8 +814,10 @@ public class HtmlWriter : DocWriter
                 WriteStart(HtmlTags.ROW);
                 WriteMarkupAttributes(Markup);
                 Os.WriteByte(GT);
+
                 // contents
                 IElement cell;
+
                 for (var i = 0; i < row.Columns; i++)
                 {
                     if ((cell = (IElement)row.GetCell(i)) != null)
@@ -781,11 +829,13 @@ public class HtmlWriter : DocWriter
                 // end tag
                 AddTabs(indent);
                 WriteEnd(HtmlTags.ROW);
+
                 return;
             }
             case Element.TABLE:
             {
                 Table table;
+
                 try
                 {
                     table = (Table)element;
@@ -796,6 +846,7 @@ public class HtmlWriter : DocWriter
                 }
 
                 table.Complete();
+
                 // start tag
                 AddTabs(indent);
                 WriteStart(HtmlTags.TABLE);
@@ -805,20 +856,23 @@ public class HtmlWriter : DocWriter
                 Os.WriteByte(EQUALS);
                 Os.WriteByte(QUOTE);
                 Write(table.Width.ToString(CultureInfo.InvariantCulture));
+
                 if (!table.Locked)
                 {
-                    Write("%");
+                    Write(str: "%");
                 }
 
                 Os.WriteByte(QUOTE);
                 var alignment = HtmlEncoder.GetAlignment(table.Alignment);
-                if (!"".Equals(alignment))
+
+                if (!"".Equals(alignment, StringComparison.OrdinalIgnoreCase))
                 {
                     Write(HtmlTags.ALIGN, alignment);
                 }
 
                 Write(HtmlTags.CELLPADDING, table.Cellpadding.ToString(CultureInfo.InvariantCulture));
                 Write(HtmlTags.CELLSPACING, table.Cellspacing.ToString(CultureInfo.InvariantCulture));
+
                 if (table.BorderWidth.ApproxNotEqual(Rectangle.UNDEFINED))
                 {
                     Write(HtmlTags.BORDERWIDTH, table.BorderWidth.ToString(CultureInfo.InvariantCulture));
@@ -835,8 +889,9 @@ public class HtmlWriter : DocWriter
                 }
 
                 Os.WriteByte(GT);
+
                 // contents
-                foreach (Row row in table)
+                foreach (var row in table)
                 {
                     Write(row, indent + 1);
                 }
@@ -844,12 +899,14 @@ public class HtmlWriter : DocWriter
                 // end tag
                 AddTabs(indent);
                 WriteEnd(HtmlTags.TABLE);
+
                 return;
             }
             case Element.ANNOTATION:
             {
                 var annotation = (Annotation)element;
                 WriteComment(annotation.Title + ": " + annotation.Content);
+
                 return;
             }
             case Element.IMGRAW:
@@ -858,6 +915,7 @@ public class HtmlWriter : DocWriter
             case Element.IMGTEMPLATE:
             {
                 var image = (Image)element;
+
                 if (image.Url == null)
                 {
                     return;
@@ -867,11 +925,12 @@ public class HtmlWriter : DocWriter
                 AddTabs(indent);
                 WriteStart(HtmlTags.IMAGE);
                 var path = image.Url.ToString();
+
                 if (Imagepath != null)
                 {
-                    if (path.IndexOf("/", StringComparison.Ordinal) > 0)
+                    if (path.IndexOf(value: '/', StringComparison.Ordinal) > 0)
                     {
-                        path = Imagepath + path.Substring(path.LastIndexOf("/", StringComparison.Ordinal) + 1);
+                        path = Imagepath + path.Substring(path.LastIndexOf(value: '/') + 1);
                     }
                     else
                     {
@@ -880,6 +939,7 @@ public class HtmlWriter : DocWriter
                 }
 
                 Write(HtmlTags.URL, path);
+
                 if ((image.Alignment & Image.RIGHT_ALIGN) > 0)
                 {
                     Write(HtmlTags.ALIGN, HtmlTags.ALIGN_RIGHT);
@@ -902,6 +962,7 @@ public class HtmlWriter : DocWriter
                 Write(HtmlTags.PLAINHEIGHT, image.ScaledHeight.ToString(CultureInfo.InvariantCulture));
                 WriteMarkupAttributes(Markup);
                 WriteEnd();
+
                 return;
             }
 
@@ -917,12 +978,13 @@ public class HtmlWriter : DocWriter
             return;
         }
 
-        Write(" ");
+        Write(str: " ");
         Write(HtmlTags.STYLE);
-        Write("=\"");
+        Write(str: "=\"");
+
         if (styleAttributes != null)
         {
-            foreach (string key in styleAttributes.Keys)
+            foreach (var key in styleAttributes.Keys)
             {
                 WriteCssProperty(key, styleAttributes[key]);
             }
@@ -944,10 +1006,12 @@ public class HtmlWriter : DocWriter
 
             var fontstyle = font.Style;
             var bf = font.BaseFont;
+
             if (bf != null)
             {
                 var ps = bf.PostscriptFontName.ToLower(CultureInfo.InvariantCulture);
-                if (ps.IndexOf("bold", StringComparison.OrdinalIgnoreCase) >= 0)
+
+                if (ps.IndexOf(value: "bold", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (fontstyle == Font.UNDEFINED)
                     {
@@ -957,8 +1021,8 @@ public class HtmlWriter : DocWriter
                     fontstyle |= Font.BOLD;
                 }
 
-                if (ps.IndexOf("italic", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    ps.IndexOf("oblique", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (ps.IndexOf(value: "italic", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    ps.IndexOf(value: "oblique", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (fontstyle == Font.UNDEFINED)
                     {
@@ -975,13 +1039,16 @@ public class HtmlWriter : DocWriter
                 {
                     case Font.BOLD:
                         WriteCssProperty(html.Markup.CSS_KEY_FONTWEIGHT, html.Markup.CSS_VALUE_BOLD);
+
                         break;
                     case Font.ITALIC:
                         WriteCssProperty(html.Markup.CSS_KEY_FONTSTYLE, html.Markup.CSS_VALUE_ITALIC);
+
                         break;
                     case Font.BOLDITALIC:
                         WriteCssProperty(html.Markup.CSS_KEY_FONTWEIGHT, html.Markup.CSS_VALUE_BOLD);
                         WriteCssProperty(html.Markup.CSS_KEY_FONTSTYLE, html.Markup.CSS_VALUE_ITALIC);
+
                         break;
                 }
 
@@ -999,42 +1066,50 @@ public class HtmlWriter : DocWriter
             }
         }
 
-        Write("\"");
+        Write(str: "\"");
     }
 
     protected void WriteComment(string comment)
     {
-        AddTabs(2);
-        Os.Write(Begincomment, 0, Begincomment.Length);
+        AddTabs(indent: 2);
+        Os.Write(Begincomment, offset: 0, Begincomment.Length);
         Write(comment);
-        Os.Write(Endcomment, 0, Endcomment.Length);
+        Os.Write(Endcomment, offset: 0, Endcomment.Length);
     }
 
     /// <summary>
     ///     Writes out a CSS property.
     /// </summary>
     protected void WriteCssProperty(string prop, string value)
-    {
-        Write(new StringBuilder(prop).Append(": ").Append(value).Append("; ").ToString());
-    }
+        => Write(new StringBuilder(prop).Append(value: ": ").Append(value).Append(value: "; ").ToString());
 
     protected void WriteHeader(Meta meta)
     {
-        AddTabs(2);
+        if (meta == null)
+        {
+            throw new ArgumentNullException(nameof(meta));
+        }
+
+        AddTabs(indent: 2);
         WriteStart(HtmlTags.META);
+
         switch (meta.Type)
         {
             case Element.HEADER:
                 Write(HtmlTags.NAME, ((Header)meta).Name);
+
                 break;
             case Element.SUBJECT:
                 Write(HtmlTags.NAME, HtmlTags.SUBJECT);
+
                 break;
             case Element.KEYWORDS:
                 Write(HtmlTags.NAME, HtmlTags.KEYWORDS);
+
                 break;
             case Element.AUTHOR:
                 Write(HtmlTags.NAME, HtmlTags.AUTHOR);
+
                 break;
         }
 
@@ -1049,9 +1124,15 @@ public class HtmlWriter : DocWriter
     /// <param name="header">the element that has to be written</param>
     protected void WriteJavaScript(Header header)
     {
-        AddTabs(2);
+        if (header == null)
+        {
+            throw new ArgumentNullException(nameof(header));
+        }
+
+        AddTabs(indent: 2);
         WriteStart(HtmlTags.SCRIPT);
         Write(HtmlTags.LANGUAGE, HtmlTags.JAVASCRIPT);
+
         if (Markup.Count > 0)
         {
             /* JavaScript reference example:
@@ -1074,26 +1155,30 @@ public class HtmlWriter : DocWriter
              */
             Write(HtmlTags.TYPE, html.Markup.HTML_VALUE_JAVASCRIPT);
             Os.WriteByte(GT);
-            AddTabs(2);
+            AddTabs(indent: 2);
             Write(Encoding.ASCII.GetString(Begincomment) + "\n");
             Write(header.Content);
-            AddTabs(2);
+            AddTabs(indent: 2);
             Write("//" + Encoding.ASCII.GetString(Endcomment));
-            AddTabs(2);
+            AddTabs(indent: 2);
             WriteEnd(HtmlTags.SCRIPT);
         }
     }
 
     protected void WriteLink(Header header)
     {
-        AddTabs(2);
+        if (header == null)
+        {
+            throw new ArgumentNullException(nameof(header));
+        }
+
+        AddTabs(indent: 2);
         WriteStart(HtmlTags.LINK);
         Write(HtmlTags.REL, header.Name);
         Write(HtmlTags.TYPE, HtmlTags.TEXT_CSS);
         Write(HtmlTags.REFERENCE, header.Content);
         WriteEnd();
     }
-
 
     /// <summary>
     ///     Writes the HTML representation of a section.
@@ -1102,15 +1187,22 @@ public class HtmlWriter : DocWriter
     /// <param name="indent">the indentation</param>
     protected void WriteSection(Section section, int indent)
     {
+        if (section == null)
+        {
+            throw new ArgumentNullException(nameof(section));
+        }
+
         if (section.Title != null)
         {
             var depth = section.Depth - 1;
+
             if (depth > 5)
             {
                 depth = 5;
             }
 
             var styleAttributes = new Properties();
+
             if (section.Title.HasLeading())
             {
                 styleAttributes[html.Markup.CSS_KEY_LINEHEIGHT] = section.Title.TotalLeading + "pt";
@@ -1121,7 +1213,8 @@ public class HtmlWriter : DocWriter
             WriteStart(HtmlTags.H[depth]);
             Write(section.Title.Font, styleAttributes);
             var alignment = HtmlEncoder.GetAlignment(section.Title.Alignment);
-            if (!"".Equals(alignment))
+
+            if (!"".Equals(alignment, StringComparison.OrdinalIgnoreCase))
             {
                 Write(HtmlTags.ALIGN, alignment);
             }
@@ -1129,6 +1222,7 @@ public class HtmlWriter : DocWriter
             WriteMarkupAttributes(Markup);
             Os.WriteByte(GT);
             Currentfont.Push(section.Title.Font);
+
             // contents
             foreach (var i in section.Title)
             {
@@ -1141,7 +1235,7 @@ public class HtmlWriter : DocWriter
             Currentfont.Pop();
         }
 
-        foreach (IElement i in section)
+        foreach (var i in section)
         {
             Write(i, indent);
         }

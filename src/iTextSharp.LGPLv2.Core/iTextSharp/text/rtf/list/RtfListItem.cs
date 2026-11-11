@@ -55,9 +55,10 @@ public class RtfListItem : RtfParagraph
         for (var i = 0; i < Chunks.Count; i++)
         {
             var rtfElement = Chunks[i];
-            if (rtfElement is RtfList)
+
+            if (rtfElement is RtfList list)
             {
-                ((RtfList)rtfElement).SetListNumber(listNumber);
+                list.SetListNumber(listNumber);
                 SetLevel(listLevel);
             }
         }
@@ -73,58 +74,60 @@ public class RtfListItem : RtfParagraph
     ///     @since 2.1.3
     /// </summary>
     /// <param name="level">the level to set</param>
-    public void SetLevel(int level)
-    {
-        _level = level;
-    }
+    public void SetLevel(int level) => _level = level;
 
     /// <summary>
     ///     Set the parent RtfList.
     /// </summary>
     /// <param name="parentList">The parent RtfList to use.</param>
-    public void SetParent(RtfListLevel parentList)
-    {
-        _parentList = parentList;
-    }
+    public void SetParent(RtfListLevel parentList) => _parentList = parentList;
 
     /// <summary>
     ///     Writes the content of this RtfListItem.
     /// </summary>
-    public override void WriteContent(Stream result)
+    public override void WriteContent(Stream outp)
     {
+        if (outp == null)
+        {
+            throw new ArgumentNullException(nameof(outp));
+        }
+
         byte[] t;
+
         if (ParagraphStyle.GetSpacingBefore() > 0)
         {
-            result.Write(RtfParagraphStyle.SpacingBefore, 0, RtfParagraphStyle.SpacingBefore.Length);
-            result.Write(t = IntToByteArray(ParagraphStyle.GetSpacingBefore()), 0, t.Length);
+            outp.Write(RtfParagraphStyle.SpacingBefore, offset: 0, RtfParagraphStyle.SpacingBefore.Length);
+            outp.Write(t = IntToByteArray(ParagraphStyle.GetSpacingBefore()), offset: 0, t.Length);
         }
 
         if (ParagraphStyle.GetSpacingAfter() > 0)
         {
-            result.Write(RtfParagraphStyle.SpacingAfter, 0, RtfParagraphStyle.SpacingAfter.Length);
-            result.Write(t = IntToByteArray(ParagraphStyle.GetSpacingAfter()), 0, t.Length);
+            outp.Write(RtfParagraphStyle.SpacingAfter, offset: 0, RtfParagraphStyle.SpacingAfter.Length);
+            outp.Write(t = IntToByteArray(ParagraphStyle.GetSpacingAfter()), offset: 0, t.Length);
         }
 
         if (ParagraphStyle.GetLineLeading() > 0)
         {
-            result.Write(LineSpacing, 0, LineSpacing.Length);
-            result.Write(t = IntToByteArray(ParagraphStyle.GetLineLeading()), 0, t.Length);
+            outp.Write(LineSpacing, offset: 0, LineSpacing.Length);
+            outp.Write(t = IntToByteArray(ParagraphStyle.GetLineLeading()), offset: 0, t.Length);
         }
 
         for (var i = 0; i < Chunks.Count; i++)
         {
             var rtfElement = Chunks[i];
-            if (rtfElement is RtfChunk)
+
+            if (rtfElement is RtfChunk chunk)
             {
-                ((RtfChunk)rtfElement).SetSoftLineBreaks(true);
+                chunk.SetSoftLineBreaks(softLineBreaks: true);
             }
             else if (rtfElement is RtfList)
             {
-                result.Write(Paragraph, 0, Paragraph.Length);
+                outp.Write(Paragraph, offset: 0, Paragraph.Length);
                 _containsInnerList = true;
             }
 
-            rtfElement.WriteContent(result);
+            rtfElement.WriteContent(outp);
+
             if (rtfElement is RtfList)
             {
                 switch (_parentList.GetLevelFollowValue())
@@ -132,12 +135,14 @@ public class RtfListItem : RtfParagraph
                     case RtfListLevel.LIST_LEVEL_FOLLOW_NOTHING:
                         break;
                     case RtfListLevel.LIST_LEVEL_FOLLOW_TAB:
-                        _parentList.WriteListBeginning(result);
-                        result.Write(RtfList.Tab, 0, RtfList.Tab.Length);
+                        _parentList.WriteListBeginning(outp);
+                        outp.Write(RtfList.Tab, offset: 0, RtfList.Tab.Length);
+
                         break;
                     case RtfListLevel.LIST_LEVEL_FOLLOW_SPACE:
-                        _parentList.WriteListBeginning(result);
-                        result.Write(t = DocWriter.GetIsoBytes(" "), 0, t.Length);
+                        _parentList.WriteListBeginning(outp);
+                        outp.Write(t = DocWriter.GetIsoBytes(text: " "), offset: 0, t.Length);
+
                         break;
                 }
             }
@@ -159,10 +164,11 @@ public class RtfListItem : RtfParagraph
         for (var i = 0; i < Chunks.Count; i++)
         {
             var rtfElement = Chunks[i];
-            if (rtfElement is RtfList)
+
+            if (rtfElement is RtfList rl)
             {
-                var rl = (RtfList)rtfElement;
                 rl.WriteDefinition(outp);
+
                 return true;
             }
         }
@@ -174,14 +180,15 @@ public class RtfListItem : RtfParagraph
     ///     Correct the indentation of RtfLists in this RtfListItem by adding left/first line indentation
     ///     from the parent RtfList. Also calls correctIndentation on all child RtfLists.
     /// </summary>
-    protected internal void CorrectIndentation()
+    internal protected void CorrectIndentation()
     {
         for (var i = 0; i < Chunks.Count; i++)
         {
             var rtfElement = Chunks[i];
-            if (rtfElement is RtfList)
+
+            if (rtfElement is RtfList list)
             {
-                ((RtfList)rtfElement).CorrectIndentation();
+                list.CorrectIndentation();
             }
         }
     }

@@ -2,6 +2,7 @@ using System.util;
 using iTextSharp.text.pdf.collection;
 using iTextSharp.text.pdf.interfaces;
 using Org.BouncyCastle.X509;
+using ArgumentNullException = System.ArgumentNullException;
 
 namespace iTextSharp.text.pdf;
 
@@ -31,7 +32,16 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// </summary>
     /// <param name="reader">the original document. It cannot be reused</param>
     /// <param name="os">the output stream</param>
-    public PdfStamper(PdfReader reader, Stream os) => Stamper = new PdfStamperImp(reader, os, '\0', false);
+    public PdfStamper(PdfReader reader, Stream os)
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        Stamper = new PdfStamperImp(reader, os, pdfVersion: '\0', append: false);
+        MoreInfo = Stamper.Reader.Info;
+    }
 
     /// <summary>
     ///     Starts the process of adding extra content to an existing PDF
@@ -43,8 +53,16 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="reader">the original document. It cannot be reused</param>
     /// <param name="os">the output stream</param>
     /// <param name="pdfVersion">the new pdf version or '\0' to keep the same version as the original</param>
-    public PdfStamper(PdfReader reader, Stream os, char pdfVersion) =>
-        Stamper = new PdfStamperImp(reader, os, pdfVersion, false);
+    public PdfStamper(PdfReader reader, Stream os, char pdfVersion)
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        Stamper = new PdfStamperImp(reader, os, pdfVersion, append: false);
+        MoreInfo = Stamper.Reader.Info;
+    }
 
     /// <summary>
     ///     Starts the process of adding extra content to an existing PDF
@@ -58,8 +76,16 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="os">the output stream</param>
     /// <param name="pdfVersion">the new pdf version or '\0' to keep the same version as the original</param>
     /// <param name="append">if  true  appends the document changes as a new revision. This is</param>
-    public PdfStamper(PdfReader reader, Stream os, char pdfVersion, bool append) =>
+    public PdfStamper(PdfReader reader, Stream os, char pdfVersion, bool append)
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         Stamper = new PdfStamperImp(reader, os, pdfVersion, append);
+        MoreInfo = Stamper.Reader.Info;
+    }
 
     /// <summary>
     ///     Gets the  AcroFields  object that allows to get and set field values
@@ -166,10 +192,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         set => Stamper.XmpMetadata = value;
     }
 
-    public void Dispose()
-    {
-        Close();
-    }
+    public void Dispose() => Close();
 
     /// <summary>
     ///     Sets the encryption options for this document. The userPassword and the
@@ -192,12 +215,12 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     {
         if (Stamper.IsAppend())
         {
-            throw new DocumentException("Append mode does not support changing the encryption status.");
+            throw new DocumentException(message: "Append mode does not support changing the encryption status.");
         }
 
         if (Stamper.ContentWritten)
         {
-            throw new DocumentException("Content was already written to the output.");
+            throw new DocumentException(message: "Content was already written to the output.");
         }
 
         Stamper.SetEncryption(userPassword, ownerPassword, permissions, encryptionType);
@@ -223,12 +246,12 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     {
         if (Stamper.IsAppend())
         {
-            throw new DocumentException("Append mode does not support changing the encryption status.");
+            throw new DocumentException(message: "Append mode does not support changing the encryption status.");
         }
 
         if (Stamper.ContentWritten)
         {
-            throw new DocumentException("Content was already written to the output.");
+            throw new DocumentException(message: "Content was already written to the output.");
         }
 
         Stamper.SetEncryption(certs, permissions, encryptionType);
@@ -243,10 +266,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         set => Stamper.ViewerPreferences = value;
     }
 
-    public virtual void AddViewerPreference(PdfName key, PdfObject value)
-    {
-        Stamper.AddViewerPreference(key, value);
-    }
+    public virtual void AddViewerPreference(PdfName key, PdfObject value) => Stamper.AddViewerPreference(key, value);
 
     /// <summary>
     ///     Applies a digital signature to a document, possibly as a new revision, making
@@ -286,6 +306,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     public static PdfStamper CreateSignature(PdfReader reader, Stream os, char pdfVersion, string tempFile, bool append)
     {
         PdfStamper stp;
+
         if (tempFile == null)
         {
             var bout = new ByteBuffer();
@@ -297,7 +318,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         {
             if (Directory.Exists(tempFile))
             {
-                tempFile = Path.GetTempFileName();
+                tempFile = Path.GetRandomFileName();
             }
 
             var fout = new FileStream(tempFile, FileMode.Create, FileAccess.Write);
@@ -311,6 +332,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         stp._hasSignature = true;
         var catalog = reader.Catalog;
         var acroForm = (PdfDictionary)PdfReader.GetPdfObject(catalog.Get(PdfName.Acroform), catalog);
+
         if (acroForm != null)
         {
             acroForm.Remove(PdfName.Needappearances);
@@ -348,8 +370,8 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="os">the output stream</param>
     /// <param name="pdfVersion">the new pdf version or '\0' to keep the same version as the original</param>
     /// <returns>a  PdfStamper </returns>
-    public static PdfStamper CreateSignature(PdfReader reader, Stream os, char pdfVersion) =>
-        CreateSignature(reader, os, pdfVersion, null, false);
+    public static PdfStamper CreateSignature(PdfReader reader, Stream os, char pdfVersion)
+        => CreateSignature(reader, os, pdfVersion, tempFile: null, append: false);
 
     /// <summary>
     ///     Applies a digital signature to a document. The returned PdfStamper
@@ -382,8 +404,8 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="pdfVersion">the new pdf version or '\0' to keep the same version as the original</param>
     /// <param name="tempFile">location of the temporary file. If it's a directory a temporary file will be created there.</param>
     /// <returns>a  PdfStamper </returns>
-    public static PdfStamper CreateSignature(PdfReader reader, Stream os, char pdfVersion, string tempFile) =>
-        CreateSignature(reader, os, pdfVersion, tempFile, false);
+    public static PdfStamper CreateSignature(PdfReader reader, Stream os, char pdfVersion, string tempFile)
+        => CreateSignature(reader, os, pdfVersion, tempFile, append: false);
 
     /// <summary>
     ///     Adds an annotation of form field in a specific page. This page number
@@ -391,20 +413,14 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// </summary>
     /// <param name="annot">the annotation</param>
     /// <param name="page">the page</param>
-    public void AddAnnotation(PdfAnnotation annot, int page)
-    {
-        Stamper.AddAnnotation(annot, page);
-    }
+    public void AddAnnotation(PdfAnnotation annot, int page) => Stamper.AddAnnotation(annot, page);
 
     /// <summary>
     ///     Adds the comments present in an FDF file.
     ///     @throws IOException on error
     /// </summary>
     /// <param name="fdf">the FDF file</param>
-    public void AddComments(FdfReader fdf)
-    {
-        Stamper.AddComments(fdf);
-    }
+    public void AddComments(FdfReader fdf) => Stamper.AddComments(fdf);
 
     /// <summary>
     ///     Adds a file attachment at the document level. Existing attachments will be kept.
@@ -417,9 +433,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="file">the path to the file. It will only be used if</param>
     /// <param name="fileDisplay">the actual file name stored in the pdf</param>
     public void AddFileAttachment(string description, byte[] fileStore, string file, string fileDisplay)
-    {
-        AddFileAttachment(description, PdfFileSpecification.FileEmbedded(Stamper, file, fileDisplay, fileStore));
-    }
+        => AddFileAttachment(description, PdfFileSpecification.FileEmbedded(Stamper, file, fileDisplay, fileStore));
 
     /// <summary>
     ///     Adds a file attachment at the document level. Existing attachments will be kept.
@@ -427,9 +441,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="description">the file description</param>
     /// <param name="fs">the file specification</param>
     public void AddFileAttachment(string description, PdfFileSpecification fs)
-    {
-        Stamper.AddFileAttachment(description, fs);
-    }
+        => Stamper.AddFileAttachment(description, fs);
 
     /// <summary>
     ///     Adds an empty signature.
@@ -446,9 +458,10 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     {
         var acroForm = Stamper.AcroForm;
         var signature = PdfFormField.CreateSignature(Stamper);
-        acroForm.SetSignatureParams(signature, name, llx, lly, urx, ury);
+        PdfAcroForm.SetSignatureParams(signature, name, llx, lly, urx, ury);
         acroForm.DrawSignatureAppearences(signature, llx, lly, urx, ury);
         AddAnnotation(signature, page);
+
         return signature;
     }
 
@@ -465,6 +478,14 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         if (!_hasSignature)
         {
             Stamper.Close(MoreInfo);
+
+            return;
+        }
+
+        if (SignatureAppearance.IsPreClosed())
+        {
+            Stamper.Close(MoreInfo);
+
             return;
         }
 
@@ -475,16 +496,17 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
         var buf = new byte[8192];
         int n;
         var inp = SignatureAppearance.RangeStream;
-        while ((n = inp.Read(buf, 0, buf.Length)) > 0)
+
+        while ((n = inp.Read(buf, offset: 0, buf.Length)) > 0)
         {
-            sig.Signer.Update(buf, 0, n);
+            sig.Signer.Update(buf, off: 0, n);
         }
 
         buf = new byte[totalBuf];
         var bsig = sig.SignerContents;
-        Array.Copy(bsig, 0, buf, 0, bsig.Length);
+        Array.Copy(bsig, sourceIndex: 0, buf, destinationIndex: 0, bsig.Length);
         var str = new PdfString(buf);
-        str.SetHexWriting(true);
+        str.SetHexWriting(hexWriting: true);
         var dic = new PdfDictionary();
         dic.Put(PdfName.Contents, str);
         SignatureAppearance.Close(dic);
@@ -498,8 +520,8 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="reader">the PDF document where the page is</param>
     /// <param name="pageNumber">the page number. The first page is 1</param>
     /// <returns>the template representing the imported page</returns>
-    public PdfImportedPage GetImportedPage(PdfReader reader, int pageNumber) =>
-        Stamper.GetImportedPage(reader, pageNumber);
+    public PdfImportedPage GetImportedPage(PdfReader reader, int pageNumber)
+        => Stamper.GetImportedPage(reader, pageNumber);
 
     /// <summary>
     ///     Gets a  PdfContentByte  to write over the page of
@@ -534,10 +556,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// </summary>
     /// <param name="pageNumber">the page number position where the new page will be inserted</param>
     /// <param name="mediabox">the size of the new page</param>
-    public void InsertPage(int pageNumber, Rectangle mediabox)
-    {
-        Stamper.InsertPage(pageNumber, mediabox);
-    }
+    public void InsertPage(int pageNumber, Rectangle mediabox) => Stamper.InsertPage(pageNumber, mediabox);
 
     /// <summary>
     ///     This is the most simple way to change a PDF into a
@@ -552,7 +571,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="initialView">can be PdfName.D, PdfName.T or PdfName.H</param>
     public void MakePackage(PdfName initialView)
     {
-        var collection = new PdfCollection(0);
+        var collection = new PdfCollection(type: 0);
         collection.Put(PdfName.View, initialView);
         Stamper.MakePackage(collection);
     }
@@ -561,10 +580,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     ///     Adds or replaces the Collection Dictionary in the Catalog.
     /// </summary>
     /// <param name="collection">the new collection dictionary.</param>
-    public void MakePackage(PdfCollection collection)
-    {
-        Stamper.MakePackage(collection);
-    }
+    public void MakePackage(PdfCollection collection) => Stamper.MakePackage(collection);
 
     /// <summary>
     ///     Adds  name  to the list of fields that will be flattened on close,
@@ -587,6 +603,11 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="pageReplaced">the page to replace in this document</param>
     public void ReplacePage(PdfReader r, int pageImported, int pageReplaced)
     {
+        if (r == null)
+        {
+            throw new ArgumentNullException(nameof(r));
+        }
+
         Stamper.ReplacePage(r, pageImported, pageReplaced);
     }
 
@@ -595,10 +616,7 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// </summary>
     /// <param name="seconds">the number of seconds to display the page. A negative value removes the entry</param>
     /// <param name="page">the page where the duration will be applied. The first page is 1</param>
-    public void SetDuration(int seconds, int page)
-    {
-        Stamper.SetDuration(seconds, page);
-    }
+    public void SetDuration(int seconds, int page) => Stamper.SetDuration(seconds, page);
 
     /// <summary>
     ///     Sets the encryption options for this document. The userPassword and the
@@ -617,16 +635,16 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     {
         if (Stamper.Append)
         {
-            throw new DocumentException("Append mode does not support changing the encryption status.");
+            throw new DocumentException(message: "Append mode does not support changing the encryption status.");
         }
 
         if (Stamper.ContentWritten)
         {
-            throw new DocumentException("Content was already written to the output.");
+            throw new DocumentException(message: "Content was already written to the output.");
         }
 
         Stamper.SetEncryption(userPassword, ownerPassword, permissions,
-                              strength128Bits ? PdfWriter.STANDARD_ENCRYPTION_128 : PdfWriter.STANDARD_ENCRYPTION_40);
+            strength128Bits ? PdfWriter.STANDARD_ENCRYPTION_128 : PdfWriter.STANDARD_ENCRYPTION_40);
     }
 
     /// <summary>
@@ -643,9 +661,8 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="ownerPassword">the owner password. Can be null or empty</param>
     /// <param name="permissions">the user permissions</param>
     public void SetEncryption(bool strength, string userPassword, string ownerPassword, int permissions)
-    {
-        SetEncryption(DocWriter.GetIsoBytes(userPassword), DocWriter.GetIsoBytes(ownerPassword), permissions, strength);
-    }
+        => SetEncryption(DocWriter.GetIsoBytes(userPassword), DocWriter.GetIsoBytes(ownerPassword), permissions,
+            strength);
 
     /// <summary>
     ///     Sets the encryption options for this document. The userPassword and the
@@ -665,10 +682,8 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="ownerPassword">the owner password. Can be null or empty</param>
     /// <param name="permissions">the user permissions</param>
     public void SetEncryption(int encryptionType, string userPassword, string ownerPassword, int permissions)
-    {
-        SetEncryption(DocWriter.GetIsoBytes(userPassword), DocWriter.GetIsoBytes(ownerPassword), permissions,
-                      encryptionType);
-    }
+        => SetEncryption(DocWriter.GetIsoBytes(userPassword), DocWriter.GetIsoBytes(ownerPassword), permissions,
+            encryptionType);
 
     /// <summary>
     ///     Sets the document's compression to the new 1.5 mode with object streams and xref
@@ -694,6 +709,11 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// <param name="page">the page where the action will be applied. The first page is 1</param>
     public void SetPageAction(PdfName actionType, PdfAction action, int page)
     {
+        if (actionType == null)
+        {
+            throw new ArgumentNullException(nameof(actionType));
+        }
+
         Stamper.SetPageAction(actionType, action, page);
     }
 
@@ -704,18 +724,58 @@ public class PdfStamper : IPdfViewerPreferences, IPdfEncryptionSettings, IDispos
     /// </summary>
     /// <param name="image">the image</param>
     /// <param name="page">the page</param>
-    public void SetThumbnail(Image image, int page)
-    {
-        Stamper.SetThumbnail(image, page);
-    }
+    public void SetThumbnail(Image image, int page) => Stamper.SetThumbnail(image, page);
 
     /// <summary>
     ///     Sets the transition for the page
     /// </summary>
     /// <param name="transition">the transition object. A  null  removes the transition</param>
     /// <param name="page">the page where the transition will be applied. The first page is 1</param>
-    public void SetTransition(PdfTransition transition, int page)
-    {
-        Stamper.SetTransition(transition, page);
-    }
+    public void SetTransition(PdfTransition transition, int page) => Stamper.SetTransition(transition, page);
+
+    /// <summary>
+    ///     Adds the author to a Document.
+    /// </summary>
+    /// <param name="author">the name of the author</param>
+    public void AddAuthor(string author) => MoreInfo[PdfName.Author.Key] = author;
+
+    /// <summary>
+    ///     Adds the current date and time to a Document.
+    /// </summary>
+    public void AddCreationDate(DateTime? dateTime = null)
+        => MoreInfo[PdfName.Creationdate.Key] = dateTime.HasValue
+            ? dateTime.Value.ToString(format: "ddd MMM dd HH:mm:ss zzz yyyy", CultureInfo.InvariantCulture)
+            : DateTime.Now.ToString(format: "ddd MMM dd HH:mm:ss zzz yyyy", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    ///     Adds the creator to a Document.
+    /// </summary>
+    /// <param name="creator">the name of the creator</param>
+    public void AddCreator(string creator) => MoreInfo[PdfName.Creator.Key] = creator;
+
+    /// <summary>
+    ///     Adds the keywords to a Document.
+    /// </summary>
+    /// <param name="keywords">keywords to add</param>
+    public void AddKeywords(string keywords) => MoreInfo[PdfName.Keywords.Key] = keywords;
+
+    /// <summary>
+    ///     Adds the producer to a Document.
+    /// </summary>
+    public void AddProducer(string producer = null) => MoreInfo[PdfName.Producer.Key] = producer ?? Document.Version;
+
+    /// <summary>
+    ///     Adds the subject to a Document.
+    /// </summary>
+    /// <param name="subject">the subject</param>
+    public void AddSubject(string subject) => MoreInfo[PdfName.Subject.Key] = subject;
+
+    /// <summary>
+    ///     methods concerning the header or some meta information
+    /// </summary>
+    /// <summary>
+    ///     Adds the title to a Document.
+    /// </summary>
+    /// <param name="title">the title</param>
+    public void AddTitle(string title) => MoreInfo[PdfName.Title.Key] = title;
 }

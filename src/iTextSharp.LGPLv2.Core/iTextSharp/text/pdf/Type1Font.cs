@@ -12,7 +12,10 @@ internal class Type1Font : BaseFont
     ///     Types of records in a PFB file. ASCII is 1 and BINARY is 2.
     ///     They have to appear in the PFB file in this sequence.
     /// </summary>
-    private static readonly int[] _pfbTypes = { 1, 2, 1 };
+    private static readonly int[] _pfbTypes =
+    {
+        1, 2, 1
+    };
 
     /// <summary>
     ///     true  if this font is one of the 14 built in fonts.
@@ -25,7 +28,7 @@ internal class Type1Font : BaseFont
     ///     Integer, Integer, String and int[]. This is the code, width, name and char bbox.
     ///     The key is the name of the char and also an Integer with the char number.
     /// </summary>
-    private readonly INullValueDictionary<object, object[]> _charMetrics = new NullValueDictionary<object, object[]>();
+    private readonly NullValueDictionary<object, object[]> _charMetrics = new();
 
     /// <summary>
     ///     The file in use.
@@ -39,7 +42,12 @@ internal class Type1Font : BaseFont
     ///     the second character and position 1 is the kerning distance. This is
     ///     repeated for all the pairs.
     /// </summary>
-    private readonly INullValueDictionary<string, object[]> _kernPairs = new NullValueDictionary<string, object[]>();
+    private readonly NullValueDictionary<string, object[]> _kernPairs = new();
+
+    /// <summary>
+    ///     The PFB file if the input was made with a  byte  array.
+    /// </summary>
+    protected readonly byte[] Pfb;
 
     /// <summary>
     ///     A variable.
@@ -146,11 +154,6 @@ internal class Type1Font : BaseFont
     private int _xHeight = 480;
 
     /// <summary>
-    ///     The PFB file if the input was made with a  byte  array.
-    /// </summary>
-    protected byte[] Pfb;
-
-    /// <summary>
     ///     Creates a new Type1 font.
     ///     @throws DocumentException the AFM file is invalid
     ///     @throws IOException the AFM file could not be read
@@ -168,7 +171,7 @@ internal class Type1Font : BaseFont
     {
         if (emb && ttfAfm != null && pfb == null)
         {
-            throw new DocumentException("Two byte arrays are needed if the Type1 font is embedded.");
+            throw new DocumentException(message: "Two byte arrays are needed if the Type1 font is embedded.");
         }
 
         if (emb && ttfAfm != null)
@@ -182,30 +185,34 @@ internal class Type1Font : BaseFont
         FontType = FONT_TYPE_T1;
         RandomAccessFileOrArray rf = null;
         Stream istr = null;
+
         if (BuiltinFonts14.ContainsKey(afmFile))
         {
             Embedded = false;
             _builtinFont = true;
             var buf = new byte[1024];
+
             try
             {
                 istr = GetResourceStream(RESOURCE_PATH + afmFile + ".afm");
+
                 if (istr == null)
                 {
-                    Console.Error.WriteLine(afmFile + " not found as resource.");
                     throw new DocumentException(afmFile + " not found as resource.");
                 }
 
-                var ostr = new MemoryStream();
+                using var ostr = new MemoryStream();
+
                 while (true)
                 {
-                    var size = istr.Read(buf, 0, buf.Length);
+                    var size = istr.Read(buf, offset: 0, buf.Length);
+
                     if (size == 0)
                     {
                         break;
                     }
 
-                    ostr.Write(buf, 0, size);
+                    ostr.Write(buf, offset: 0, size);
                 }
 
                 buf = ostr.ToArray();
@@ -245,7 +252,7 @@ internal class Type1Font : BaseFont
                 }
             }
         }
-        else if (afmFile.ToLower(CultureInfo.InvariantCulture).EndsWith(".afm"))
+        else if (afmFile.EndsWith(value: ".afm", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
@@ -275,11 +282,12 @@ internal class Type1Font : BaseFont
                 }
             }
         }
-        else if (afmFile.ToLower(CultureInfo.InvariantCulture).EndsWith(".pfm"))
+        else if (afmFile.EndsWith(value: ".pfm", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
                 var ba = new MemoryStream();
+
                 if (ttfAfm == null)
                 {
                     rf = new RandomAccessFileOrArray(afmFile, forceRead);
@@ -315,14 +323,16 @@ internal class Type1Font : BaseFont
         }
 
         _encodingScheme = _encodingScheme.Trim();
-        if (_encodingScheme.Equals("AdobeStandardEncoding") || _encodingScheme.Equals("StandardEncoding"))
+
+        if (_encodingScheme.Equals(value: "AdobeStandardEncoding", StringComparison.Ordinal) ||
+            _encodingScheme.Equals(value: "StandardEncoding", StringComparison.Ordinal))
         {
             FontSpecific = false;
         }
 
-        if (!encoding.StartsWith("#"))
+        if (!encoding.StartsWith(value: '#'))
         {
-            PdfEncodings.ConvertToBytes(" ", enc); // check if the encoding exists
+            PdfEncodings.ConvertToBytes(text: " ", enc); // check if the encoding exists
         }
 
         CreateEncoding();
@@ -337,10 +347,13 @@ internal class Type1Font : BaseFont
     ///     font name}.
     /// </summary>
     /// <returns>the full name of the font</returns>
-    public override string[][] AllNameEntries
+    public override string[][] AllNameEntries => new[]
     {
-        get { return new[] { new[] { "4", "", "", "", _fullName } }; }
-    }
+        new[]
+        {
+            "4", "", "", "", _fullName
+        }
+    };
 
     /// <summary>
     ///     Gets the family name of the font. If it is a True Type font
@@ -351,10 +364,13 @@ internal class Type1Font : BaseFont
     ///     font name}.
     /// </summary>
     /// <returns>the family name of the font</returns>
-    public override string[][] FamilyFontName
+    public override string[][] FamilyFontName => new[]
     {
-        get { return new[] { new[] { "", "", "", _familyName } }; }
-    }
+        new[]
+        {
+            "", "", "", _familyName
+        }
+    };
 
     /// <summary>
     ///     Gets the full name of the font. If it is a True Type font
@@ -365,10 +381,13 @@ internal class Type1Font : BaseFont
     ///     font name}.
     /// </summary>
     /// <returns>the full name of the font</returns>
-    public override string[][] FullFontName
+    public override string[][] FullFontName => new[]
     {
-        get { return new[] { new[] { "", "", "", _fullName } }; }
-    }
+        new[]
+        {
+            "", "", "", _fullName
+        }
+    };
 
     /// <summary>
     ///     Gets the postscript font name.
@@ -401,30 +420,33 @@ internal class Type1Font : BaseFont
         dic.Put(PdfName.Fontname, new PdfName(_fontName));
         dic.Put(PdfName.Italicangle, new PdfNumber(_italicAngle));
         dic.Put(PdfName.Stemv, new PdfNumber(_stdVw));
+
         if (fontStream != null)
         {
             dic.Put(PdfName.Fontfile, fontStream);
         }
 
         var flags = 0;
+
         if (_isFixedPitch)
         {
             flags |= 1;
         }
 
         flags |= FontSpecific ? 4 : 32;
+
         if (_italicAngle < 0)
         {
             flags |= 64;
         }
 
-        if (_fontName.IndexOf("Caps", StringComparison.Ordinal) >= 0 ||
-            _fontName.EndsWith("SC", StringComparison.Ordinal))
+        if (_fontName.IndexOf(value: "Caps", StringComparison.Ordinal) >= 0 ||
+            _fontName.EndsWith(value: "SC", StringComparison.Ordinal))
         {
             flags |= 131072;
         }
 
-        if (_weight.Equals("Bold"))
+        if (_weight.Equals(value: "Bold", StringComparison.Ordinal))
         {
             flags |= 262144;
         }
@@ -493,12 +515,14 @@ internal class Type1Font : BaseFont
         }
 
         RandomAccessFileOrArray rf = null;
+
         try
         {
-            var filePfb = _fileName.Substring(0, _fileName.Length - 3) + "pfb";
+            var filePfb = _fileName.Substring(startIndex: 0, _fileName.Length - 3) + "pfb";
+
             if (Pfb == null)
             {
-                rf = new RandomAccessFileOrArray(filePfb, true);
+                rf = new RandomAccessFileOrArray(filePfb, forceRead: true);
             }
             else
             {
@@ -509,6 +533,7 @@ internal class Type1Font : BaseFont
             var st = new byte[fileLength - 18];
             var lengths = new int[3];
             var bytePtr = 0;
+
             for (var k = 0; k < 3; ++k)
             {
                 if (rf.Read() != 0x80)
@@ -526,9 +551,11 @@ internal class Type1Font : BaseFont
                 size += rf.Read() << 16;
                 size += rf.Read() << 24;
                 lengths[k] = size;
+
                 while (size != 0)
                 {
                     var got = rf.Read(st, bytePtr, size);
+
                     if (got < 0)
                     {
                         throw new DocumentException("Premature end in " + filePfb);
@@ -568,18 +595,21 @@ internal class Type1Font : BaseFont
     public override int GetKerning(int char1, int char2)
     {
         var first = GlyphList.UnicodeToName(char1);
+
         if (first == null)
         {
             return 0;
         }
 
         var second = GlyphList.UnicodeToName(char2);
+
         if (second == null)
         {
             return 0;
         }
 
         var obj = _kernPairs[first];
+
         if (obj == null)
         {
             return 0;
@@ -612,89 +642,93 @@ internal class Type1Font : BaseFont
     {
         string line;
         var isMetrics = false;
+
         while ((line = rf.ReadLine()) != null)
         {
-            var tok = new StringTokenizer(line, " ,\n\r\t\f");
+            var tok = new StringTokenizer(line, delim: " ,\n\r\t\f");
+
             if (!tok.HasMoreTokens())
             {
                 continue;
             }
 
             var ident = tok.NextToken();
-            if (ident.Equals("FontName"))
+
+            if (ident.Equals(value: "FontName", StringComparison.Ordinal))
             {
-                _fontName = tok.NextToken("\u00ff").Substring(1);
+                _fontName = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("FullName"))
+            else if (ident.Equals(value: "FullName", StringComparison.Ordinal))
             {
-                _fullName = tok.NextToken("\u00ff").Substring(1);
+                _fullName = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("FamilyName"))
+            else if (ident.Equals(value: "FamilyName", StringComparison.Ordinal))
             {
-                _familyName = tok.NextToken("\u00ff").Substring(1);
+                _familyName = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("Weight"))
+            else if (ident.Equals(value: "Weight", StringComparison.Ordinal))
             {
-                _weight = tok.NextToken("\u00ff").Substring(1);
+                _weight = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("ItalicAngle"))
+            else if (ident.Equals(value: "ItalicAngle", StringComparison.Ordinal))
             {
                 _italicAngle = float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("IsFixedPitch"))
+            else if (ident.Equals(value: "IsFixedPitch", StringComparison.Ordinal))
             {
-                _isFixedPitch = tok.NextToken().Equals("true");
+                _isFixedPitch = tok.NextToken().Equals(value: "true", StringComparison.Ordinal);
             }
-            else if (ident.Equals("CharacterSet"))
+            else if (ident.Equals(value: "CharacterSet", StringComparison.Ordinal))
             {
-                _characterSet = tok.NextToken("\u00ff").Substring(1);
+                _characterSet = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("FontBBox"))
+            else if (ident.Equals(value: "FontBBox", StringComparison.Ordinal))
             {
                 _llx = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
                 _lly = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
                 _urx = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
                 _ury = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("UnderlinePosition"))
+            else if (ident.Equals(value: "UnderlinePosition", StringComparison.Ordinal))
             {
                 _underlinePosition = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("UnderlineThickness"))
+            else if (ident.Equals(value: "UnderlineThickness", StringComparison.Ordinal))
             {
                 _underlineThickness = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("EncodingScheme"))
+            else if (ident.Equals(value: "EncodingScheme", StringComparison.Ordinal))
             {
-                _encodingScheme = tok.NextToken("\u00ff").Substring(1);
+                _encodingScheme = tok.NextToken(delim: "\u00ff").Substring(startIndex: 1);
             }
-            else if (ident.Equals("CapHeight"))
+            else if (ident.Equals(value: "CapHeight", StringComparison.Ordinal))
             {
                 _capHeight = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("XHeight"))
+            else if (ident.Equals(value: "XHeight", StringComparison.Ordinal))
             {
                 _xHeight = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("Ascender"))
+            else if (ident.Equals(value: "Ascender", StringComparison.Ordinal))
             {
                 _ascender = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("Descender"))
+            else if (ident.Equals(value: "Descender", StringComparison.Ordinal))
             {
                 _descender = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("StdHW"))
+            else if (ident.Equals(value: "StdHW", StringComparison.Ordinal))
             {
                 _stdHw = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("StdVW"))
+            else if (ident.Equals(value: "StdVW", StringComparison.Ordinal))
             {
                 _stdVw = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
             }
-            else if (ident.Equals("StartCharMetrics"))
+            else if (ident.Equals(value: "StartCharMetrics", StringComparison.Ordinal))
             {
                 isMetrics = true;
+
                 break;
             }
         }
@@ -707,15 +741,18 @@ internal class Type1Font : BaseFont
         while ((line = rf.ReadLine()) != null)
         {
             var tok = new StringTokenizer(line);
+
             if (!tok.HasMoreTokens())
             {
                 continue;
             }
 
             var ident = tok.NextToken();
-            if (ident.Equals("EndCharMetrics"))
+
+            if (ident.Equals(value: "EndCharMetrics", StringComparison.Ordinal))
             {
                 isMetrics = false;
+
                 break;
             }
 
@@ -724,41 +761,48 @@ internal class Type1Font : BaseFont
             var n = "";
             int[] b = null;
 
-            tok = new StringTokenizer(line, ";");
+            tok = new StringTokenizer(line, delim: ";");
+
             while (tok.HasMoreTokens())
             {
                 var tokc = new StringTokenizer(tok.NextToken());
+
                 if (!tokc.HasMoreTokens())
                 {
                     continue;
                 }
 
                 ident = tokc.NextToken();
-                if (ident.Equals("C"))
+
+                if (ident.Equals(value: "C", StringComparison.Ordinal))
                 {
                     c = int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture);
                 }
-                else if (ident.Equals("WX"))
+                else if (ident.Equals(value: "WX", StringComparison.Ordinal))
                 {
                     wx = (int)float.Parse(tokc.NextToken(), NumberFormatInfo.InvariantInfo);
                 }
-                else if (ident.Equals("N"))
+                else if (ident.Equals(value: "N", StringComparison.Ordinal))
                 {
                     n = tokc.NextToken();
                 }
-                else if (ident.Equals("B"))
+                else if (ident.Equals(value: "B", StringComparison.Ordinal))
                 {
                     b = new[]
-                        {
-                            int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
-                            int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
-                            int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
-                            int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
-                        };
+                    {
+                        int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
+                        int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
+                        int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture),
+                        int.Parse(tokc.NextToken(), CultureInfo.InvariantCulture)
+                    };
                 }
             }
 
-            object[] metrics = { c, wx, n, b };
+            object[] metrics =
+            {
+                c, wx, n, b
+            };
+
             if (c >= 0)
             {
                 _charMetrics[c] = metrics;
@@ -772,32 +816,36 @@ internal class Type1Font : BaseFont
             throw new DocumentException("Missing EndCharMetrics in " + _fileName);
         }
 
-        if (!_charMetrics.ContainsKey("nonbreakingspace"))
+        if (!_charMetrics.ContainsKey(key: "nonbreakingspace"))
         {
-            var space = _charMetrics["space"];
+            var space = _charMetrics[key: "space"];
+
             if (space != null)
             {
-                _charMetrics["nonbreakingspace"] = space;
+                _charMetrics[key: "nonbreakingspace"] = space;
             }
         }
 
         while ((line = rf.ReadLine()) != null)
         {
             var tok = new StringTokenizer(line);
+
             if (!tok.HasMoreTokens())
             {
                 continue;
             }
 
             var ident = tok.NextToken();
-            if (ident.Equals("EndFontMetrics"))
+
+            if (ident.Equals(value: "EndFontMetrics", StringComparison.Ordinal))
             {
                 return;
             }
 
-            if (ident.Equals("StartKernPairs"))
+            if (ident.Equals(value: "StartKernPairs", StringComparison.Ordinal))
             {
                 isMetrics = true;
+
                 break;
             }
         }
@@ -810,35 +858,42 @@ internal class Type1Font : BaseFont
         while ((line = rf.ReadLine()) != null)
         {
             var tok = new StringTokenizer(line);
+
             if (!tok.HasMoreTokens())
             {
                 continue;
             }
 
             var ident = tok.NextToken();
-            if (ident.Equals("KPX"))
+
+            if (ident.Equals(value: "KPX", StringComparison.Ordinal))
             {
                 var first = tok.NextToken();
                 var second = tok.NextToken();
                 var width = (int)float.Parse(tok.NextToken(), NumberFormatInfo.InvariantInfo);
                 var relates = _kernPairs[first];
+
                 if (relates == null)
                 {
-                    _kernPairs[first] = new object[] { second, width };
+                    _kernPairs[first] = new object[]
+                    {
+                        second, width
+                    };
                 }
                 else
                 {
                     var n = relates.Length;
                     var relates2 = new object[n + 2];
-                    Array.Copy(relates, 0, relates2, 0, n);
+                    Array.Copy(relates, sourceIndex: 0, relates2, destinationIndex: 0, n);
                     relates2[n] = second;
                     relates2[n + 1] = width;
                     _kernPairs[first] = relates2;
                 }
             }
-            else if (ident.Equals("EndKernPairs"))
+            else if (ident.Equals(value: "EndKernPairs", StringComparison.Ordinal))
             {
                 isMetrics = false;
+
                 break;
             }
         }
@@ -861,22 +916,30 @@ internal class Type1Font : BaseFont
     public override bool SetKerning(int char1, int char2, int kern)
     {
         var first = GlyphList.UnicodeToName(char1);
+
         if (first == null)
         {
             return false;
         }
 
         var second = GlyphList.UnicodeToName(char2);
+
         if (second == null)
         {
             return false;
         }
 
         var obj = _kernPairs[first];
+
         if (obj == null)
         {
-            obj = new object[] { second, kern };
+            obj = new object[]
+            {
+                second, kern
+            };
+
             _kernPairs[first] = obj;
+
             return true;
         }
 
@@ -885,16 +948,18 @@ internal class Type1Font : BaseFont
             if (second.Equals(obj[k]))
             {
                 obj[k + 1] = kern;
+
                 return true;
             }
         }
 
         var size = obj.Length;
         var obj2 = new object[size + 2];
-        Array.Copy(obj, 0, obj2, 0, size);
+        Array.Copy(obj, sourceIndex: 0, obj2, destinationIndex: 0, size);
         obj2[size] = second;
         obj2[size + 1] = kern;
         _kernPairs[first] = obj2;
+
         return true;
     }
 
@@ -909,6 +974,7 @@ internal class Type1Font : BaseFont
     internal override int GetRawWidth(int c, string name)
     {
         object[] metrics;
+
         if (name == null)
         {
             // font specific
@@ -916,7 +982,7 @@ internal class Type1Font : BaseFont
         }
         else
         {
-            if (name.Equals(".notdef"))
+            if (name.Equals(value: ".notdef", StringComparison.Ordinal))
             {
                 return 0;
             }
@@ -946,10 +1012,12 @@ internal class Type1Font : BaseFont
         var lastChar = (int)parms[1];
         var shortTag = (byte[])parms[2];
         var subsetp = (bool)parms[3] && subset;
+
         if (!subsetp)
         {
             firstChar = 0;
             lastChar = shortTag.Length - 1;
+
             for (var k = 0; k < shortTag.Length; ++k)
             {
                 shortTag[k] = 1;
@@ -960,6 +1028,7 @@ internal class Type1Font : BaseFont
         PdfObject pobj = null;
         PdfIndirectObject obj = null;
         pobj = GetFullFontStream();
+
         if (pobj != null)
         {
             obj = writer.AddToBody(pobj);
@@ -967,6 +1036,7 @@ internal class Type1Font : BaseFont
         }
 
         pobj = GetFontDescriptor(indFont);
+
         if (pobj != null)
         {
             obj = writer.AddToBody(pobj);
@@ -980,6 +1050,7 @@ internal class Type1Font : BaseFont
     protected override int[] GetRawCharBBox(int c, string name)
     {
         object[] metrics;
+
         if (name == null)
         {
             // font specific
@@ -987,7 +1058,7 @@ internal class Type1Font : BaseFont
         }
         else
         {
-            if (name.Equals(".notdef"))
+            if (name.Equals(value: ".notdef", StringComparison.Ordinal))
             {
                 return null;
             }
@@ -1011,33 +1082,43 @@ internal class Type1Font : BaseFont
     /// <param name="shortTag">a 256 bytes long  byte  array where each unused byte is represented by 0</param>
     /// <param name="fontDescriptor">the indirect reference to a PdfDictionary containing the font descriptor or  null </param>
     /// <returns>the PdfDictionary containing the font dictionary</returns>
-    private PdfDictionary getFontBaseType(PdfIndirectReference fontDescriptor, int firstChar, int lastChar,
-                                          byte[] shortTag)
+    private PdfDictionary getFontBaseType(PdfIndirectReference fontDescriptor,
+        int firstChar,
+        int lastChar,
+        byte[] shortTag)
     {
         var dic = new PdfDictionary(PdfName.Font);
         dic.Put(PdfName.Subtype, PdfName.Type1);
         dic.Put(PdfName.Basefont, new PdfName(_fontName));
-        var stdEncoding = encoding.Equals(CP1252) || encoding.Equals(MACROMAN);
+
+        var stdEncoding = encoding.Equals(CP1252, StringComparison.Ordinal) ||
+                          encoding.Equals(MACROMAN, StringComparison.Ordinal);
+
         if (!FontSpecific || SpecialMap != null)
         {
             for (var k = firstChar; k <= lastChar; ++k)
             {
-                if (!differences[k].Equals(notdef))
+                if (!differences[k].Equals(notdef, StringComparison.Ordinal))
                 {
                     firstChar = k;
+
                     break;
                 }
             }
 
             if (stdEncoding)
             {
-                dic.Put(PdfName.Encoding, encoding.Equals(CP1252) ? PdfName.WinAnsiEncoding : PdfName.MacRomanEncoding);
+                dic.Put(PdfName.Encoding,
+                    encoding.Equals(CP1252, StringComparison.Ordinal)
+                        ? PdfName.WinAnsiEncoding
+                        : PdfName.MacRomanEncoding);
             }
             else
             {
                 var enc = new PdfDictionary(PdfName.Encoding);
                 var dif = new PdfArray();
                 var gap = true;
+
                 for (var k = firstChar; k <= lastChar; ++k)
                 {
                     if (shortTag[k] != 0)
@@ -1066,11 +1147,12 @@ internal class Type1Font : BaseFont
             dic.Put(PdfName.Firstchar, new PdfNumber(firstChar));
             dic.Put(PdfName.Lastchar, new PdfNumber(lastChar));
             var wd = new PdfArray();
+
             for (var k = firstChar; k <= lastChar; ++k)
             {
                 if (shortTag[k] == 0)
                 {
-                    wd.Add(new PdfNumber(0));
+                    wd.Add(new PdfNumber(value: 0));
                 }
                 else
                 {

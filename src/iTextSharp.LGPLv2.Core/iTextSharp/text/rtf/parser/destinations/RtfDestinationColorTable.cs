@@ -19,7 +19,7 @@ public class RtfDestinationColorTable : RtfDestination
     /// <summary>
     ///     Color map object for conversions
     /// </summary>
-    private INullValueDictionary<string, BaseColor> _colorMap;
+    private NullValueDictionary<string, BaseColor> _colorMap;
 
     /// <summary>
     ///     The number of the current color being parsed.
@@ -79,7 +79,7 @@ public class RtfDestinationColorTable : RtfDestination
     /// <summary>
     ///     Constructor.
     /// </summary>
-    public RtfDestinationColorTable() : base(null)
+    public RtfDestinationColorTable() : base(parser: null)
     {
         _colorMap = new NullValueDictionary<string, BaseColor>();
         _colorNr = 0;
@@ -90,6 +90,11 @@ public class RtfDestinationColorTable : RtfDestination
     /// </summary>
     public RtfDestinationColorTable(RtfParser parser) : base(parser)
     {
+        if (parser == null)
+        {
+            throw new ArgumentNullException(nameof(parser));
+        }
+
         _colorMap = new NullValueDictionary<string, BaseColor>();
         _colorNr = 0;
         _importHeader = parser.GetImportManager();
@@ -122,32 +127,38 @@ public class RtfDestinationColorTable : RtfDestination
     public override bool HandleCloseGroup()
     {
         processColor();
+
         return true;
     }
 
     public override bool HandleControlWord(RtfCtrlWordData ctrlWordData)
     {
-        if (ctrlWordData.CtrlWord.Equals("blue"))
+        if (ctrlWordData == null)
+        {
+            throw new ArgumentNullException(nameof(ctrlWordData));
+        }
+
+        if (ctrlWordData.CtrlWord.Equals(value: "blue", StringComparison.Ordinal))
         {
             setBlue(ctrlWordData.IntValue());
         }
 
-        if (ctrlWordData.CtrlWord.Equals("red"))
+        if (ctrlWordData.CtrlWord.Equals(value: "red", StringComparison.Ordinal))
         {
             setRed(ctrlWordData.IntValue());
         }
 
-        if (ctrlWordData.CtrlWord.Equals("green"))
+        if (ctrlWordData.CtrlWord.Equals(value: "green", StringComparison.Ordinal))
         {
             setGreen(ctrlWordData.IntValue());
         }
 
-        if (ctrlWordData.CtrlWord.Equals("cshade"))
+        if (ctrlWordData.CtrlWord.Equals(value: "cshade", StringComparison.Ordinal))
         {
             setShade(ctrlWordData.IntValue());
         }
 
-        if (ctrlWordData.CtrlWord.Equals("ctint"))
+        if (ctrlWordData.CtrlWord.Equals(value: "ctint", StringComparison.Ordinal))
         {
             setTint(ctrlWordData.IntValue());
         }
@@ -181,7 +192,7 @@ public class RtfDestinationColorTable : RtfDestination
 
     public override void SetParser(RtfParser parser)
     {
-        RtfParser = parser;
+        RtfParser = parser ?? throw new ArgumentNullException(nameof(parser));
         _colorMap = new NullValueDictionary<string, BaseColor>();
         _colorNr = 0;
         _importHeader = parser.GetImportManager();
@@ -199,6 +210,7 @@ public class RtfDestinationColorTable : RtfDestination
         _ctint = 255;
         _cshade = 255;
         _themeColor = RtfColorThemes.THEME_UNDEFINED;
+
         // do not reset colorNr
     }
 
@@ -213,12 +225,13 @@ public class RtfDestinationColorTable : RtfDestination
         {
             if (RtfParser.IsImport())
             {
-                _importHeader.ImportColor(_colorNr.ToString(), new BaseColor(_red, _green, _blue));
+                _importHeader.ImportColor(_colorNr.ToString(CultureInfo.InvariantCulture),
+                    new BaseColor(_red, _green, _blue));
             }
 
             if (RtfParser.IsConvert())
             {
-                _colorMap[_colorNr.ToString()] = new BaseColor(_red, _green, _blue);
+                _colorMap[_colorNr.ToString(CultureInfo.InvariantCulture)] = new BaseColor(_red, _green, _blue);
             }
         }
 
@@ -272,6 +285,7 @@ public class RtfDestinationColorTable : RtfDestination
         if (value >= 0 && value <= 255)
         {
             _cshade = value;
+
             if (value >= 0 && value < 255)
             {
                 _ctint = 255;
@@ -306,6 +320,7 @@ public class RtfDestinationColorTable : RtfDestination
         if (value >= 0 && value <= 255)
         {
             _ctint = value;
+
             if (value >= 0 && value < 255)
             {
                 _cshade = 255;

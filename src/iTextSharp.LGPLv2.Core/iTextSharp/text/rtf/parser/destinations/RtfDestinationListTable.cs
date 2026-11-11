@@ -24,11 +24,19 @@ public class RtfDestinationListTable : RtfDestination
 
     private RtfList _newList;
 
-    public RtfDestinationListTable() : base(null)
+    public RtfDestinationListTable() : base(parser: null)
     {
     }
 
-    public RtfDestinationListTable(RtfParser parser) : base(parser) => _importHeader = parser.GetImportManager();
+    public RtfDestinationListTable(RtfParser parser) : base(parser)
+    {
+        if (parser == null)
+        {
+            throw new ArgumentNullException(nameof(parser));
+        }
+
+        _importHeader = parser.GetImportManager();
+    }
 
     /// <summary>
     ///     (non-Javadoc)
@@ -48,9 +56,11 @@ public class RtfDestinationListTable : RtfDestination
     ///     (non-Javadoc)
     ///     @see com.lowagie.text.rtf.direct.RtfDestination#handleCharacter(int)
     /// </summary>
-    public override bool HandleCharacter(int ch) =>
-        // TODO Auto-generated method stub
-        true;
+    public override bool HandleCharacter(int ch)
+        =>
+
+            // TODO Auto-generated method stub
+            true;
 
     /// <summary>
     ///     (non-Javadoc)
@@ -59,9 +69,12 @@ public class RtfDestinationListTable : RtfDestination
     public override bool HandleCloseGroup()
     {
         _currentSubGroupCount--;
+
         if (_newList != null && _currentSubGroupCount == 0)
         {
-            _importHeader.ImportList(_currentListMappingNumber.ToString(), _newList.GetListNumber().ToString());
+            _importHeader.ImportList(_currentListMappingNumber.ToString(CultureInfo.InvariantCulture),
+                _newList.GetListNumber().ToString(CultureInfo.InvariantCulture));
+
             RtfParser.GetRtfDocument().Add(_newList);
         }
 
@@ -70,28 +83,31 @@ public class RtfDestinationListTable : RtfDestination
 
     public override bool HandleControlWord(RtfCtrlWordData ctrlWordData)
     {
+        if (ctrlWordData == null)
+        {
+            throw new ArgumentNullException(nameof(ctrlWordData));
+        }
+
         var result = true;
         var skipCtrlWord = false;
 
         if (RtfParser.IsImport())
         {
             skipCtrlWord = true;
-            if (ctrlWordData.CtrlWord.Equals("listtable"))
+
+            if (ctrlWordData.CtrlWord.Equals(value: "listtable", StringComparison.Ordinal))
             {
                 result = true;
                 _currentListMappingNumber = 0;
             }
-            else
-                /* Picture info for icons/images for lists */
-            if (ctrlWordData.CtrlWord.Equals("listpicture")) /* DESTINATION */
+            else if (ctrlWordData.CtrlWord.Equals(value: "listpicture", StringComparison.Ordinal)) /* DESTINATION */
             {
                 skipCtrlWord = true;
+
                 // this.rtfParser.SetTokeniserStateSkipGroup();
                 result = true;
             }
-            else
-                /* list */
-            if (ctrlWordData.CtrlWord.Equals("list")) /* DESTINATION */
+            else if (ctrlWordData.CtrlWord.Equals(value: "list", StringComparison.Ordinal)) /* DESTINATION */
             {
                 skipCtrlWord = true;
                 _newList = new RtfList(RtfParser.GetRtfDocument());
@@ -101,16 +117,16 @@ public class RtfDestinationListTable : RtfDestination
                 _currentSubGroupCount = 0;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("listtemplateid")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "listtemplateid", StringComparison.Ordinal)) /* // List item*/
             {
                 // ignore this because it gets regenerated in every document
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("listsimple")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "listsimple", StringComparison.Ordinal)) /* // List item*/
             {
                 // is value 0 or 1
-                if (ctrlWordData.HasParam && ctrlWordData.Param == "1")
+                if (ctrlWordData.HasParam && string.Equals(ctrlWordData.Param, b: "1", StringComparison.Ordinal))
                 {
                     _newList.SetListType(RtfList.LIST_TYPE_SIMPLE);
                 }
@@ -121,21 +137,23 @@ public class RtfDestinationListTable : RtfDestination
 
                 skipCtrlWord = true;
                 result = true;
+
                 // this gets set internally. Don't think it should be imported
             }
-            else if (ctrlWordData.CtrlWord.Equals("listhybrid")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "listhybrid", StringComparison.Ordinal)) /* // List item*/
             {
                 _newList.SetListType(RtfList.LIST_TYPE_HYBRID);
                 skipCtrlWord = true;
                 result = true;
+
                 // this gets set internally. Don't think it should be imported
             }
-            else if (ctrlWordData.CtrlWord.Equals("listrestarthdn")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "listrestarthdn", StringComparison.Ordinal)) /* // List item*/
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("listid"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "listid", StringComparison.Ordinal))
             {
                 // List item cannot be between -1 and -5
                 // needs to be mapped for imports and is recreated
@@ -143,33 +161,32 @@ public class RtfDestinationListTable : RtfDestination
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("listname")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "listname", StringComparison.Ordinal)) /* // List item*/
             {
                 _newList.SetName(ctrlWordData.Param);
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("liststyleid")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "liststyleid", StringComparison.Ordinal)) /* // List item*/
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("liststylename")) /* // List item*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "liststylename", StringComparison.Ordinal)) /* // List item*/
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else
-                /* listlevel */
-            if (ctrlWordData.CtrlWord.Equals("listlevel")) /* DESTINATION There are 1 or 9 listlevels per list */
+            else if (ctrlWordData.CtrlWord.Equals(value: "listlevel",
+                         StringComparison.Ordinal)) /* DESTINATION There are 1 or 9 listlevels per list */
             {
                 _currentLevel++;
                 _currentListLevel = _newList.GetListLevel(_currentLevel);
-                _currentListLevel.SetTentative(false);
+                _currentListLevel.SetTentative(isTentative: false);
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("leveljc"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "leveljc", StringComparison.Ordinal))
             {
                 // listlevel item justify
                 // this is the old number. Only use it if the current type is not set
@@ -179,12 +196,15 @@ public class RtfDestinationListTable : RtfDestination
                     {
                         case 0:
                             _currentListLevel.SetAlignment(Element.ALIGN_LEFT);
+
                             break;
                         case 1:
                             _currentListLevel.SetAlignment(Element.ALIGN_CENTER);
+
                             break;
                         case 2:
                             _currentListLevel.SetAlignment(Element.ALIGN_RIGHT);
+
                             break;
                     }
                 }
@@ -192,7 +212,7 @@ public class RtfDestinationListTable : RtfDestination
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("leveljcn"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "leveljcn", StringComparison.Ordinal))
             {
                 // listlevel item
                 //justify
@@ -201,120 +221,121 @@ public class RtfDestinationListTable : RtfDestination
                 {
                     case 0:
                         _currentListLevel.SetAlignment(Element.ALIGN_LEFT);
+
                         break;
                     case 1:
                         _currentListLevel.SetAlignment(Element.ALIGN_CENTER);
+
                         break;
                     case 2:
                         _currentListLevel.SetAlignment(Element.ALIGN_RIGHT);
+
                         break;
                 }
 
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelstartat"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelstartat", StringComparison.Ordinal))
             {
                 _currentListLevel.SetListStartAt(ctrlWordData.IntValue());
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("lvltentative"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "lvltentative", StringComparison.Ordinal))
             {
-                _currentListLevel.SetTentative(true);
+                _currentListLevel.SetTentative(isTentative: true);
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelold"))
-            {
-                // old style. ignore
-                skipCtrlWord = true;
-                result = true;
-            }
-            else if (ctrlWordData.CtrlWord.Equals("levelprev"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelold", StringComparison.Ordinal))
             {
                 // old style. ignore
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelprevspace"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelprev", StringComparison.Ordinal))
             {
                 // old style. ignore
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelspace"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelprevspace", StringComparison.Ordinal))
+            {
+                // old style. ignore
+                skipCtrlWord = true;
+                result = true;
+            }
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelspace", StringComparison.Ordinal))
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelindent"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelindent", StringComparison.Ordinal))
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("leveltext"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "leveltext", StringComparison.Ordinal))
             {
                 /* FIX */
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelfollow"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelfollow", StringComparison.Ordinal))
             {
                 _currentListLevel.SetLevelFollowValue(ctrlWordData.IntValue());
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levellegal"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levellegal", StringComparison.Ordinal))
             {
-                _currentListLevel.SetLegal(ctrlWordData.Param == "1");
+                _currentListLevel.SetLegal(string.Equals(ctrlWordData.Param, b: "1", StringComparison.Ordinal));
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelnorestart"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelnorestart", StringComparison.Ordinal))
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("chrfmt"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "chrfmt", StringComparison.Ordinal))
             {
                 /* FIX */
                 // set an attribute pair
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelpicture"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelpicture", StringComparison.Ordinal))
             {
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("li"))
-            {
-                // set an attribute pair
-                skipCtrlWord = true;
-                result = true;
-            }
-            else if (ctrlWordData.CtrlWord.Equals("fi"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "li", StringComparison.Ordinal))
             {
                 // set an attribute pair
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("jclisttab"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "fi", StringComparison.Ordinal))
             {
                 // set an attribute pair
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("tx"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "jclisttab", StringComparison.Ordinal))
             {
                 // set an attribute pair
                 skipCtrlWord = true;
                 result = true;
             }
-            else
-                /* number */
-            if (ctrlWordData.CtrlWord.Equals("levelnfc")) /* old style */
+            else if (ctrlWordData.CtrlWord.Equals(value: "tx", StringComparison.Ordinal))
+            {
+                // set an attribute pair
+                skipCtrlWord = true;
+                result = true;
+            }
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelnfc", StringComparison.Ordinal)) /* old style */
             {
                 if (_currentListLevel.GetListType() == RtfListLevel.LIST_TYPE_UNKNOWN)
                 {
@@ -324,23 +345,20 @@ public class RtfDestinationListTable : RtfDestination
                 skipCtrlWord = true;
                 result = true;
             }
-            else if (ctrlWordData.CtrlWord.Equals("levelnfcn")) /* new style takes priority over levelnfc.*/
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelnfcn",
+                         StringComparison.Ordinal)) /* new style takes priority over levelnfc.*/
             {
                 _currentListLevel.SetListType(ctrlWordData.IntValue() + RtfListLevel.LIST_TYPE_BASE);
                 skipCtrlWord = true;
                 result = true;
             }
-            else
-                /* level text */
-            if (ctrlWordData.CtrlWord.Equals("leveltemplateid"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "leveltemplateid", StringComparison.Ordinal)) /* level text */
             {
                 // ignore. this value is regenerated in each document.
                 skipCtrlWord = true;
                 result = true;
             }
-            else
-                /* levelnumber */
-            if (ctrlWordData.CtrlWord.Equals("levelnumbers"))
+            else if (ctrlWordData.CtrlWord.Equals(value: "levelnumbers", StringComparison.Ordinal)) /* levelnumber */
             {
                 skipCtrlWord = true;
                 result = true;
@@ -349,12 +367,12 @@ public class RtfDestinationListTable : RtfDestination
 
         if (RtfParser.IsConvert())
         {
-            if (ctrlWordData.CtrlWord.Equals("shppict"))
+            if (ctrlWordData.CtrlWord.Equals(value: "shppict", StringComparison.Ordinal))
             {
                 result = true;
             }
 
-            if (ctrlWordData.CtrlWord.Equals("nonshppict"))
+            if (ctrlWordData.CtrlWord.Equals(value: "nonshppict", StringComparison.Ordinal))
             {
                 skipCtrlWord = true;
                 RtfParser.SetTokeniserStateSkipGroup();
@@ -370,17 +388,21 @@ public class RtfDestinationListTable : RtfDestination
                     // WriteBuffer();
                     // WriteText(ctrlWordData.ToString());
                     result = true;
+
                     break;
                 case RtfParser.TYPE_IMPORT_FRAGMENT:
                     // WriteBuffer();
                     // WriteText(ctrlWordData.ToString());
                     result = true;
+
                     break;
                 case RtfParser.TYPE_CONVERT:
                     result = true;
+
                     break;
                 default: // error because is should be an import or convert
                     result = false;
+
                     break;
             }
         }
@@ -392,9 +414,11 @@ public class RtfDestinationListTable : RtfDestination
     ///     (non-Javadoc)
     ///     @see com.lowagie.text.rtf.direct.RtfDestination#handleGroupStart()
     /// </summary>
-    public override bool HandleOpenGroup() =>
-        // TODO Auto-generated method stub
-        true;
+    public override bool HandleOpenGroup()
+        =>
+
+            // TODO Auto-generated method stub
+            true;
 
     /// <summary>
     ///     (non-Javadoc)
@@ -403,12 +427,13 @@ public class RtfDestinationListTable : RtfDestination
     public override bool HandleOpeningSubGroup()
     {
         _currentSubGroupCount++;
+
         return true;
     }
 
     public override void SetParser(RtfParser parser)
     {
-        RtfParser = parser;
+        RtfParser = parser ?? throw new ArgumentNullException(nameof(parser));
         _importHeader = parser.GetImportManager();
         SetToDefaults();
     }

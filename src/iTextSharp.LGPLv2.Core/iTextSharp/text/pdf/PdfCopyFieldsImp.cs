@@ -7,34 +7,37 @@ namespace iTextSharp.text.pdf;
 /// </summary>
 internal class PdfCopyFieldsImp : PdfWriter
 {
-    protected internal static INullValueDictionary<PdfName, int> FieldKeys = new NullValueDictionary<PdfName, int>();
-    protected internal static INullValueDictionary<PdfName, int> WidgetKeys = new NullValueDictionary<PdfName, int>();
+    private const int _zero = 0;
+    internal protected static readonly NullValueDictionary<PdfName, int> FieldKeys = new();
+    internal protected static readonly NullValueDictionary<PdfName, int> WidgetKeys = new();
 
-    private static readonly PdfName _iTextTag = new("_iTextTag_");
-    private static readonly int _zero = 0;
+    private static readonly PdfName _iTextTag = new(name: "_iTextTag_");
     private readonly List<string> _calculationOrder = new();
+    internal readonly List<AcroFields> Fields = new();
+    internal readonly NullValueDictionary<string, object> FieldTree = new();
+    internal readonly Document Nd;
+    internal readonly List<PdfDictionary> PageDics = new();
+    internal readonly List<PdfIndirectReference> PageRefs = new();
+
+    internal readonly INullValueDictionary<PdfReader, NullValueDictionary<int, int>> Pages2Intrefs =
+        new NullValueDictionary<PdfReader, NullValueDictionary<int, int>>();
+
+    internal readonly List<PdfReader> Readers = new();
+
+    internal readonly INullValueDictionary<PdfReader, NullValueDictionary<int, int>> Readers2Intrefs =
+        new NullValueDictionary<PdfReader, NullValueDictionary<int, int>>();
+
+    internal readonly PdfDictionary Resources = new();
+
+    internal readonly INullValueDictionary<PdfReader, NullValueDictionary<int, int>> Visited =
+        new NullValueDictionary<PdfReader, NullValueDictionary<int, int>>();
+
     private List<object> _calculationOrderRefs;
     private bool _closing;
     private bool _hasSignature;
-    private INullValueDictionary<PdfArray, List<int>> _tabOrder;
-    internal List<AcroFields> Fields = new();
-    internal INullValueDictionary<string, object> FieldTree = new NullValueDictionary<string, object>();
+    private NullValueDictionary<PdfArray, List<int>> _tabOrder;
     internal RandomAccessFileOrArray File;
     internal PdfDictionary Form;
-    internal Document Nd;
-    internal List<PdfDictionary> PageDics = new();
-    internal List<PdfIndirectReference> PageRefs = new();
-
-    internal INullValueDictionary<PdfReader, IntHashtable> Pages2Intrefs =
-        new NullValueDictionary<PdfReader, IntHashtable>();
-
-    internal List<PdfReader> Readers = new();
-
-    internal INullValueDictionary<PdfReader, IntHashtable> Readers2Intrefs =
-        new NullValueDictionary<PdfReader, IntHashtable>();
-
-    internal PdfDictionary Resources = new();
-    internal INullValueDictionary<PdfReader, IntHashtable> Visited = new NullValueDictionary<PdfReader, IntHashtable>();
 
     static PdfCopyFieldsImp()
     {
@@ -74,13 +77,14 @@ internal class PdfCopyFieldsImp : PdfWriter
         FieldKeys[PdfName.Sv] = one;
     }
 
-    internal PdfCopyFieldsImp(Stream os) : this(os, '\0')
+    internal PdfCopyFieldsImp(Stream os) : this(os, pdfVersion: '\0')
     {
     }
 
     internal PdfCopyFieldsImp(Stream os, char pdfVersion) : base(new PdfDocument(), os)
     {
         Pdf.AddWriter(this);
+
         if (pdfVersion != 0)
         {
             PdfVersion = pdfVersion;
@@ -95,6 +99,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         if (_closing)
         {
             base.Close();
+
             return;
         }
 
@@ -116,11 +121,12 @@ internal class PdfCopyFieldsImp : PdfWriter
     {
         if (!Readers2Intrefs.ContainsKey(reader) && reader.Tampered)
         {
-            throw new DocumentException("The document was reused.");
+            throw new DocumentException(message: "The document was reused.");
         }
 
         reader = new PdfReader(reader);
         reader.SelectPages(pagesToKeep);
+
         if (reader.NumberOfPages == 0)
         {
             return;
@@ -134,10 +140,11 @@ internal class PdfCopyFieldsImp : PdfWriter
     {
         if (!reader.IsOpenedWithFullPermissions)
         {
-            throw new BadPasswordException("PdfReader not opened with owner password");
+            throw new BadPasswordException(message: "PdfReader not opened with owner password");
         }
 
         OpenDoc();
+
         if (Readers2Intrefs.ContainsKey(reader))
         {
             reader = new PdfReader(reader);
@@ -146,7 +153,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         {
             if (reader.Tampered)
             {
-                throw new DocumentException("The document was reused.");
+                throw new DocumentException(message: "The document was reused.");
             }
 
             reader.ConsolidateNamedDestinations();
@@ -154,10 +161,11 @@ internal class PdfCopyFieldsImp : PdfWriter
         }
 
         reader.ShuffleSubsetNames();
-        Readers2Intrefs[reader] = new IntHashtable();
+        Readers2Intrefs[reader] = new NullValueDictionary<int, int>();
         Readers.Add(reader);
         var len = reader.NumberOfPages;
-        var refs = new IntHashtable();
+        var refs = new NullValueDictionary<int, int>();
+
         for (var p = 1; p <= len; ++p)
         {
             refs[reader.GetPageOrigRef(p).Number] = 1;
@@ -165,12 +173,12 @@ internal class PdfCopyFieldsImp : PdfWriter
         }
 
         Pages2Intrefs[reader] = refs;
-        Visited[reader] = new IntHashtable();
+        Visited[reader] = new NullValueDictionary<int, int>();
         Fields.Add(reader.AcroFields);
         UpdateCalculationOrder(reader);
     }
 
-    internal void AddPageOffsetToField(INullValueDictionary<string, AcroFields.Item> fd, int pageOffset)
+    internal static void AddPageOffsetToField(INullValueDictionary<string, AcroFields.Item> fd, int pageOffset)
     {
         if (pageOffset == 0)
         {
@@ -180,6 +188,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         foreach (var item in fd.Values)
         {
             var page = item.Page;
+
             for (var k = 0; k < page.Count; ++k)
             {
                 var p = item.GetPage(k);
@@ -195,12 +204,14 @@ internal class PdfCopyFieldsImp : PdfWriter
             list.Add(item.GetPage(k));
             var merged = item.GetMerged(k);
             var dr = merged.Get(PdfName.Dr);
+
             if (dr != null)
             {
                 PdfFormField.MergeResources(Resources, (PdfDictionary)PdfReader.GetPdfObject(dr));
             }
 
             var widget = new PdfDictionary();
+
             foreach (var key in merged.Keys)
             {
                 if (WidgetKeys.ContainsKey(key))
@@ -219,7 +230,8 @@ internal class PdfCopyFieldsImp : PdfWriter
     internal void MergeField(string name, AcroFields.Item item)
     {
         var map = FieldTree;
-        var tk = new StringTokenizer(name, ".");
+        var tk = new StringTokenizer(name, delim: ".");
+
         if (!tk.HasMoreTokens())
         {
             return;
@@ -229,6 +241,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         {
             var s = tk.NextToken();
             var obj = map[s];
+
             if (tk.HasMoreTokens())
             {
                 if (obj == null)
@@ -236,12 +249,13 @@ internal class PdfCopyFieldsImp : PdfWriter
                     obj = new NullValueDictionary<string, object>();
                     map[s] = obj;
                     map = (NullValueDictionary<string, object>)obj;
+
                     continue;
                 }
 
-                if (obj is NullValueDictionary<string, object>)
+                if (obj is NullValueDictionary<string, object> objects)
                 {
-                    map = (NullValueDictionary<string, object>)obj;
+                    map = objects;
                 }
                 else
                 {
@@ -255,10 +269,12 @@ internal class PdfCopyFieldsImp : PdfWriter
                     return;
                 }
 
-                var merged = item.GetMerged(0);
+                var merged = item.GetMerged(idx: 0);
+
                 if (obj == null)
                 {
                     var field = new PdfDictionary();
+
                     if (PdfName.Sig.Equals(merged.Get(PdfName.Ft)))
                     {
                         _hasSignature = true;
@@ -280,9 +296,10 @@ internal class PdfCopyFieldsImp : PdfWriter
                 else
                 {
                     var list = (List<object>)obj;
-                    var field = (PdfDictionary)list[0];
+                    var field = (PdfDictionary)list[index: 0];
                     var type1 = (PdfName)field.Get(PdfName.Ft);
                     var type2 = (PdfName)merged.Get(PdfName.Ft);
+
                     if (type1 == null || !type1.Equals(type2))
                     {
                         return;
@@ -290,6 +307,7 @@ internal class PdfCopyFieldsImp : PdfWriter
 
                     var flag1 = 0;
                     var f1 = field.Get(PdfName.Ff);
+
                     if (f1 != null && f1.IsNumber())
                     {
                         flag1 = ((PdfNumber)f1).IntValue;
@@ -297,6 +315,7 @@ internal class PdfCopyFieldsImp : PdfWriter
 
                     var flag2 = 0;
                     var f2 = merged.Get(PdfName.Ff);
+
                     if (f2 != null && f2.IsNumber())
                     {
                         flag2 = ((PdfNumber)f2).IntValue;
@@ -333,6 +352,7 @@ internal class PdfCopyFieldsImp : PdfWriter
     internal virtual void MergeFields()
     {
         var pageOffset = 0;
+
         for (var k = 0; k < Fields.Count; ++k)
         {
             var fd = Fields[k].Fields;
@@ -371,6 +391,7 @@ internal class PdfCopyFieldsImp : PdfWriter
             case PdfObject.STREAM:
             {
                 var dic = (PdfDictionary)obj;
+
                 foreach (var key in dic.Keys)
                 {
                     if (restricted && (key.Equals(PdfName.Parent) || key.Equals(PdfName.Kids)))
@@ -379,9 +400,11 @@ internal class PdfCopyFieldsImp : PdfWriter
                     }
 
                     var ob = dic.Get(key);
+
                     if (ob != null && ob.IsIndirect())
                     {
                         var ind = (PrIndirectReference)ob;
+
                         if (!SetVisited(ind) && !IsPage(ind))
                         {
                             var refi = GetNewReference(ind);
@@ -390,7 +413,7 @@ internal class PdfCopyFieldsImp : PdfWriter
                     }
                     else
                     {
-                        Propagate(ob, null, restricted);
+                        Propagate(ob, refo: null, restricted);
                     }
                 }
 
@@ -402,9 +425,11 @@ internal class PdfCopyFieldsImp : PdfWriter
                 for (var it = ((PdfArray)obj).GetListIterator(); it.HasNext();)
                 {
                     var ob = it.Next();
+
                     if (ob != null && ob.IsIndirect())
                     {
                         var ind = (PrIndirectReference)ob;
+
                         if (!IsVisited(ind) && !IsPage(ind))
                         {
                             var refi = GetNewReference(ind);
@@ -413,7 +438,7 @@ internal class PdfCopyFieldsImp : PdfWriter
                     }
                     else
                     {
-                        Propagate(ob, null, restricted);
+                        Propagate(ob, refo: null, restricted);
                     }
                 }
 
@@ -421,15 +446,16 @@ internal class PdfCopyFieldsImp : PdfWriter
             }
             case PdfObject.INDIRECT:
             {
-                throw new Exception("Reference pointing to reference.");
+                throw new InvalidOperationException(message: "Reference pointing to reference.");
             }
         }
     }
 
-    protected internal override int GetNewObjectNumber(PdfReader reader, int number, int generation)
+    internal protected override int GetNewObjectNumber(PdfReader reader, int number, int generation)
     {
         var refs = Readers2Intrefs[reader];
         var n = refs[number];
+
         if (n == 0)
         {
             n = IndirectReferenceNumber;
@@ -444,9 +470,10 @@ internal class PdfCopyFieldsImp : PdfWriter
     /// </summary>
     /// <param name="refi">the reference that needs to be checked</param>
     /// <returns>true is the reference refers to a page object.</returns>
-    protected internal bool IsPage(PrIndirectReference refi)
+    internal protected bool IsPage(PrIndirectReference refi)
     {
         var refs = Pages2Intrefs[refi.Reader];
+
         if (refs != null)
         {
             return refs.ContainsKey(refi.Number);
@@ -460,9 +487,10 @@ internal class PdfCopyFieldsImp : PdfWriter
     /// </summary>
     /// <param name="refi">the reference that needs to be checked</param>
     /// <returns>true if the reference was already visited</returns>
-    protected internal bool IsVisited(PrIndirectReference refi)
+    internal protected bool IsVisited(PrIndirectReference refi)
     {
         var refs = Visited[refi.Reader];
+
         if (refs != null)
         {
             return refs.ContainsKey(refi.Number);
@@ -471,9 +499,10 @@ internal class PdfCopyFieldsImp : PdfWriter
         return false;
     }
 
-    protected internal bool IsVisited(PdfReader reader, int number, int generation)
+    internal protected bool IsVisited(PdfReader reader, int number, int generation)
     {
         var refs = Readers2Intrefs[reader];
+
         return refs.ContainsKey(number);
     }
 
@@ -482,51 +511,59 @@ internal class PdfCopyFieldsImp : PdfWriter
     /// </summary>
     /// <param name="refi">the reference that needs to be set to "visited"</param>
     /// <returns>true if the reference was set to visited</returns>
-    protected internal bool SetVisited(PrIndirectReference refi)
+    internal protected bool SetVisited(PrIndirectReference refi)
     {
         var refs = Visited[refi.Reader];
+
         if (refs != null)
         {
             var old = refs[refi.Number];
             refs[refi.Number] = 1;
+
             return old != 0;
         }
 
         return false;
     }
 
-    protected internal void UpdateCalculationOrder(PdfReader reader)
+    internal protected void UpdateCalculationOrder(PdfReader reader)
     {
         var catalog = reader.Catalog;
         var acro = catalog.GetAsDict(PdfName.Acroform);
+
         if (acro == null)
         {
             return;
         }
 
         var co = acro.GetAsArray(PdfName.Co);
+
         if (co == null || co.Size == 0)
         {
             return;
         }
 
         var af = reader.AcroFields;
+
         for (var k = 0; k < co.Size; ++k)
         {
             var obj = co[k];
+
             if (obj == null || !obj.IsIndirect())
             {
                 continue;
             }
 
             var name = getCoName(reader, (PrIndirectReference)obj);
+
             if (af.GetFieldItem(name) == null)
             {
                 continue;
             }
 
             name = "." + name;
-            if (_calculationOrder.Contains(name))
+
+            if (_calculationOrder.Contains(name, StringComparer.Ordinal))
             {
                 continue;
             }
@@ -538,12 +575,14 @@ internal class PdfCopyFieldsImp : PdfWriter
     protected PdfArray BranchForm(INullValueDictionary<string, object> level, PdfIndirectReference parent, string fname)
     {
         var arr = new PdfArray();
+
         foreach (var entry in level)
         {
             var name = entry.Key;
             var obj = entry.Value;
             var ind = PdfIndirectReference;
             var dic = new PdfDictionary();
+
             if (parent != null)
             {
                 dic.Put(PdfName.Parent, parent);
@@ -552,27 +591,30 @@ internal class PdfCopyFieldsImp : PdfWriter
             dic.Put(PdfName.T, new PdfString(name, PdfObject.TEXT_UNICODE));
             var fname2 = $"{fname}.{name}";
             var coidx = _calculationOrder.IndexOf(fname2);
+
             if (coidx >= 0)
             {
                 _calculationOrderRefs[coidx] = ind;
             }
 
-            if (obj is INullValueDictionary<string, object>)
+            if (obj is INullValueDictionary<string, object> objects)
             {
-                dic.Put(PdfName.Kids, BranchForm((INullValueDictionary<string, object>)obj, ind, fname2));
+                dic.Put(PdfName.Kids, BranchForm(objects, ind, fname2));
                 arr.Add(ind);
                 AddToBody(dic, ind);
             }
             else
             {
                 var list = (List<object>)obj;
-                dic.MergeDifferent((PdfDictionary)list[0]);
+                dic.MergeDifferent((PdfDictionary)list[index: 0]);
+
                 if (list.Count == 3)
                 {
-                    dic.MergeDifferent((PdfDictionary)list[2]);
-                    var page = (int)list[1];
+                    dic.MergeDifferent((PdfDictionary)list[index: 2]);
+                    var page = (int)list[index: 1];
                     var pageDic = PageDics[page - 1];
                     var annots = pageDic.GetAsArray(PdfName.Annots);
+
                     if (annots == null)
                     {
                         annots = new PdfArray();
@@ -586,11 +628,13 @@ internal class PdfCopyFieldsImp : PdfWriter
                 else
                 {
                     var kids = new PdfArray();
+
                     for (var k = 1; k < list.Count; k += 2)
                     {
                         var page = (int)list[k];
                         var pageDic = PageDics[page - 1];
                         var annots = pageDic.GetAsArray(PdfName.Annots);
+
                         if (annots == null)
                         {
                             annots = new PdfArray();
@@ -605,7 +649,7 @@ internal class PdfCopyFieldsImp : PdfWriter
                         var wref = AddToBody(widget).IndirectReference;
                         adjustTabOrder(annots, wref, nn);
                         kids.Add(wref);
-                        Propagate(widget, null, false);
+                        Propagate(widget, refo: null, restricted: false);
                     }
 
                     dic.Put(PdfName.Kids, kids);
@@ -613,7 +657,7 @@ internal class PdfCopyFieldsImp : PdfWriter
 
                 arr.Add(ind);
                 AddToBody(dic, ind);
-                Propagate(dic, null, false);
+                Propagate(dic, refo: null, restricted: false);
             }
         }
 
@@ -630,6 +674,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         for (var r = 0; r < Readers.Count; ++r)
         {
             var reader = Readers[r];
+
             for (var page = 1; page <= reader.NumberOfPages; ++page)
             {
                 PageRefs.Add(GetNewReference(reader.GetPageOrigRef(page)));
@@ -639,29 +684,33 @@ internal class PdfCopyFieldsImp : PdfWriter
 
         MergeFields();
         CreateAcroForms();
+
         for (var r = 0; r < Readers.Count; ++r)
         {
             var reader = Readers[r];
+
             for (var page = 1; page <= reader.NumberOfPages; ++page)
             {
                 var dic = reader.GetPageN(page);
                 var pageRef = GetNewReference(reader.GetPageOrigRef(page));
                 var parent = Root.AddPageRef(pageRef);
                 dic.Put(PdfName.Parent, parent);
-                Propagate(dic, pageRef, false);
+                Propagate(dic, pageRef, restricted: false);
             }
         }
 
         foreach (var entry in Readers2Intrefs)
         {
             var reader = entry.Key;
+
             try
             {
                 File = reader.SafeFile;
                 File.ReOpen();
                 var t = entry.Value;
                 var keys = t.ToOrderedKeys();
-                for (var k = 0; k < keys.Length; ++k)
+
+                for (var k = 0; k < keys.Count; ++k)
                 {
                     var refi = new PrIndirectReference(reader, keys[k]);
                     AddToBody(PdfReader.GetPdfObjectRelease(refi), t[keys[k]]);
@@ -693,23 +742,26 @@ internal class PdfCopyFieldsImp : PdfWriter
 
         Form = new PdfDictionary();
         Form.Put(PdfName.Dr, Resources);
-        Propagate(Resources, null, false);
-        Form.Put(PdfName.Da, new PdfString("/Helv 0 Tf 0 g "));
+        Propagate(Resources, refo: null, restricted: false);
+        Form.Put(PdfName.Da, new PdfString(value: "/Helv 0 Tf 0 g "));
         _tabOrder = new NullValueDictionary<PdfArray, List<int>>();
         _calculationOrderRefs = new List<object>(_calculationOrder);
-        Form.Put(PdfName.Fields, BranchForm(FieldTree, null, ""));
+        Form.Put(PdfName.Fields, BranchForm(FieldTree, parent: null, fname: ""));
+
         if (_hasSignature)
         {
-            Form.Put(PdfName.Sigflags, new PdfNumber(3));
+            Form.Put(PdfName.Sigflags, new PdfNumber(value: 3));
         }
 
         var co = new PdfArray();
+
         for (var k = 0; k < _calculationOrderRefs.Count; ++k)
         {
             var obj = _calculationOrderRefs[k];
-            if (obj is PdfIndirectReference)
+
+            if (obj is PdfIndirectReference reference)
             {
-                co.Add((PdfIndirectReference)obj);
+                co.Add(reference);
             }
         }
 
@@ -722,6 +774,7 @@ internal class PdfCopyFieldsImp : PdfWriter
     protected override PdfDictionary GetCatalog(PdfIndirectReference rootObj)
     {
         PdfDictionary cat = Pdf.GetCatalog(rootObj);
+
         if (Form != null)
         {
             var refi = AddToBody(Form).IndirectReference;
@@ -731,15 +784,17 @@ internal class PdfCopyFieldsImp : PdfWriter
         return cat;
     }
 
-    protected PdfIndirectReference GetNewReference(PrIndirectReference refi) =>
-        new(0, GetNewObjectNumber(refi.Reader, refi.Number, 0));
+    protected PdfIndirectReference GetNewReference(PrIndirectReference refi)
+        => new(type: 0, GetNewObjectNumber(refi.Reader, refi.Number, generation: 0));
 
     private static string getCoName(PdfReader reader, PrIndirectReference refi)
     {
         var name = "";
+
         while (refi != null)
         {
             var obj = PdfReader.GetPdfObject(refi);
+
             if (obj == null || obj.Type != PdfObject.DICTIONARY)
             {
                 break;
@@ -747,6 +802,7 @@ internal class PdfCopyFieldsImp : PdfWriter
 
             var dic = (PdfDictionary)obj;
             var t = dic.GetAsString(PdfName.T);
+
             if (t != null)
             {
                 name = t.ToUnicodeString() + "." + name;
@@ -755,9 +811,9 @@ internal class PdfCopyFieldsImp : PdfWriter
             refi = (PrIndirectReference)dic.Get(PdfName.Parent);
         }
 
-        if (name.EndsWith("."))
+        if (name.EndsWith(value: '.'))
         {
-            name = name.Substring(0, name.Length - 1);
+            name = name.Substring(startIndex: 0, name.Length - 1);
         }
 
         return name;
@@ -767,10 +823,12 @@ internal class PdfCopyFieldsImp : PdfWriter
     {
         var v = nn.IntValue;
         var t = _tabOrder[annots];
+
         if (t == null)
         {
             t = new List<int>();
             var size = annots.Size - 1;
+
             for (var k = 0; k < size; ++k)
             {
                 t.Add(_zero);
@@ -783,6 +841,7 @@ internal class PdfCopyFieldsImp : PdfWriter
         else
         {
             var size = t.Count - 1;
+
             for (var k = size; k >= 0; --k)
             {
                 if (t[k] <= v)
@@ -790,14 +849,15 @@ internal class PdfCopyFieldsImp : PdfWriter
                     t.Insert(k + 1, v);
                     annots.Add(k + 1, ind);
                     size = -2;
+
                     break;
                 }
             }
 
             if (size != -2)
             {
-                t.Insert(0, v);
-                annots.Add(0, ind);
+                t.Insert(index: 0, v);
+                annots.Add(index: 0, ind);
             }
         }
     }

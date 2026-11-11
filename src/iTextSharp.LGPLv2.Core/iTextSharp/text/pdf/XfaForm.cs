@@ -34,35 +34,40 @@ public class XfaForm
     {
         Reader = reader;
         var xfa = GetXfaObject(reader);
+
         if (xfa == null)
         {
             XfaPresent = false;
+
             return;
         }
 
         XfaPresent = true;
-        var bout = new MemoryStream();
+        using var bout = new MemoryStream();
+
         if (xfa.IsArray())
         {
             var ar = (PdfArray)xfa;
+
             for (var k = 1; k < ar.Size; k += 2)
             {
                 var ob = ar.GetDirectObject(k);
-                if (ob is PrStream)
+
+                if (ob is PrStream stream)
                 {
-                    var b = PdfReader.GetStreamBytes((PrStream)ob);
-                    bout.Write(b, 0, b.Length);
+                    var b = PdfReader.GetStreamBytes(stream);
+                    bout.Write(b, offset: 0, b.Length);
                 }
             }
         }
-        else if (xfa is PrStream)
+        else if (xfa is PrStream stream)
         {
-            var b = PdfReader.GetStreamBytes((PrStream)xfa);
-            bout.Write(b, 0, b.Length);
+            var b = PdfReader.GetStreamBytes(stream);
+            bout.Write(b, offset: 0, b.Length);
         }
 
-        bout.Seek(0, SeekOrigin.Begin);
-        var xtr = XmlReader.Create(bout);
+        bout.Seek(offset: 0, SeekOrigin.Begin);
+        using var xtr = XmlReader.Create(bout, xml.ParserBase.SecureXmlReaderSettings);
         _domDocument = new XmlDocument();
         _domDocument.PreserveWhitespace = true;
         _domDocument.Load(xtr);
@@ -136,7 +141,7 @@ public class XfaForm
             return "";
         }
 
-        return getNodeText(n, "");
+        return getNodeText(n, name: "");
     }
 
     /// <summary>
@@ -148,7 +153,13 @@ public class XfaForm
     /// <returns>the XFA object</returns>
     public static PdfObject GetXfaObject(PdfReader reader)
     {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         var af = (PdfDictionary)PdfReader.GetPdfObjectRelease(reader.Catalog.Get(PdfName.Acroform));
+
         if (af == null)
         {
             return null;
@@ -166,15 +177,17 @@ public class XfaForm
     public static byte[] SerializeDoc(XmlNode n)
     {
         var fout = new MemoryStream();
+
         using (var sw = XmlWriter.Create(fout, new XmlWriterSettings
-                                               {
-                                                   // Specify the encoding manually, so we can ask for the UTF
-                                                   // identifier to not be included in the output
-                                                   Encoding = new UTF8Encoding(false),
-                                                   // We have to omit the XML delcaration, otherwise we'll confuse
-                                                   // the PDF readers when they try to process the XFA data
-                                                   OmitXmlDeclaration = true,
-                                               }))
+               {
+                   // Specify the encoding manually, so we can ask for the UTF
+                   // identifier to not be included in the output
+                   Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+
+                   // We have to omit the XML delcaration, otherwise we'll confuse
+                   // the PDF readers when they try to process the XFA data
+                   OmitXmlDeclaration = true
+               }))
         {
             // We use an XmlSerializer here so that we include the node itself
             // in the output text ; if we would've used n.WriteContentTo, as
@@ -199,27 +212,46 @@ public class XfaForm
     /// <param name="writer">the writer</param>
     public static void SetXfa(XfaForm form, PdfReader reader, PdfWriter writer)
     {
+        if (form == null)
+        {
+            throw new ArgumentNullException(nameof(form));
+        }
+
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        if (writer == null)
+        {
+            throw new ArgumentNullException(nameof(writer));
+        }
+
         var af = (PdfDictionary)PdfReader.GetPdfObjectRelease(reader.Catalog.Get(PdfName.Acroform));
+
         if (af == null)
         {
             return;
         }
 
         var xfa = GetXfaObject(reader);
+
         if (xfa.IsArray())
         {
             var ar = (PdfArray)xfa;
             var t = -1;
             var d = -1;
+
             for (var k = 0; k < ar.Size; k += 2)
             {
                 var s = ar.GetAsString(k);
-                if ("template".Equals(s.ToString()))
+
+                if ("template".Equals(s.ToString(), StringComparison.Ordinal))
                 {
                     t = k + 1;
                 }
 
-                if ("datasets".Equals(s.ToString()))
+                if ("datasets".Equals(s.ToString(), StringComparison.Ordinal))
                 {
                     d = k + 1;
                 }
@@ -236,6 +268,7 @@ public class XfaForm
                 dStream.FlateCompress(writer.CompressionLevel);
                 ar[d] = writer.AddToBody(dStream).IndirectReference;
                 af.Put(PdfName.Xfa, new PdfArray(ar));
+
                 return;
             }
         }
@@ -277,6 +310,7 @@ public class XfaForm
         }
 
         name = FindDatasetsName(name);
+
         if (name == null)
         {
             return null;
@@ -294,7 +328,13 @@ public class XfaForm
     /// <returns>the complete name or  null  if not found</returns>
     public string FindFieldName(string name, AcroFields af)
     {
+        if (af == null)
+        {
+            throw new ArgumentNullException(nameof(af));
+        }
+
         var items = af.Fields;
+
         if (items.ContainsKey(name))
         {
             return name;
@@ -312,9 +352,9 @@ public class XfaForm
             }
         }
 
-        if (AcroFieldsSom.AcroShort2LongName.ContainsKey(name))
+        if (AcroFieldsSom.AcroShort2LongName.TryGetValue(name, out var fieldName))
         {
-            return AcroFieldsSom.AcroShort2LongName[name];
+            return fieldName;
         }
 
         return AcroFieldsSom.InverseSearchGlobal(Xml2Som.SplitParts(name));
@@ -334,12 +374,13 @@ public class XfaForm
         }
 
         XmlNode nc = null;
+
         while ((nc = n.FirstChild) != null)
         {
             n.RemoveChild(nc);
         }
 
-        n.Attributes.RemoveNamedItem("dataNode", XFA_DATA_SCHEMA);
+        n.Attributes.RemoveNamedItem(localName: "dataNode", XFA_DATA_SCHEMA);
         n.AppendChild(_domDocument.CreateTextNode(text));
         Changed = true;
     }
@@ -349,14 +390,12 @@ public class XfaForm
     ///     @throws java.io.IOException on error
     /// </summary>
     /// <param name="writer">the writer</param>
-    public void SetXfa(PdfWriter writer)
-    {
-        SetXfa(this, Reader, writer);
-    }
+    public void SetXfa(PdfWriter writer) => SetXfa(this, Reader, writer);
 
     private static string getNodeText(XmlNode n, string name)
     {
         var n2 = n.FirstChild;
+
         while (n2 != null)
         {
             if (n2.NodeType == XmlNodeType.Element)
@@ -381,23 +420,26 @@ public class XfaForm
     private void extractNodes()
     {
         var n = _domDocument.FirstChild;
+
         while (n.NodeType != XmlNodeType.Element || n.ChildNodes.Count == 0)
         {
             n = n.NextSibling;
         }
 
         n = n.FirstChild;
+
         while (n != null)
         {
             if (n.NodeType == XmlNodeType.Element)
             {
                 var s = n.LocalName;
-                if (s.Equals("template"))
+
+                if (s.Equals(value: "template", StringComparison.Ordinal))
                 {
                     _templateNode = n;
                     TemplateSom = new Xml2SomTemplate(n);
                 }
-                else if (s.Equals("datasets"))
+                else if (s.Equals(value: "datasets", StringComparison.Ordinal))
                 {
                     DatasetsNode = n;
                     DatasetsSom = new Xml2SomDatasets(n.FirstChild);
@@ -419,8 +461,14 @@ public class XfaForm
         /// <param name="items">the Collection</param>
         public AcroFieldsSearch(ICollection<string> items)
         {
+            if (items == null)
+            {
+                throw new ArgumentNullException(nameof(items));
+            }
+
             inverseSearch = new NullValueDictionary<string, InverseStore>();
             AcroShort2LongName = new NullValueDictionary<string, string>();
+
             foreach (var itemName in items)
             {
                 var itemShort = GetShortName(itemName);
@@ -443,8 +491,8 @@ public class XfaForm
     /// </summary>
     public class InverseStore
     {
-        protected internal List<object> Follow = new();
-        protected internal List<string> Part = new();
+        internal protected List<object> Follow = new();
+        internal protected List<string> Part = new();
 
         /// <summary>
         ///     Gets the full name by traversing the hiearchie using only the
@@ -456,12 +504,14 @@ public class XfaForm
             get
             {
                 var store = this;
+
                 while (true)
                 {
-                    var obj = store.Follow[0];
-                    if (obj is string)
+                    var obj = store.Follow[index: 0];
+
+                    if (obj is string s)
                     {
-                        return (string)obj;
+                        return s;
                     }
 
                     store = (InverseStore)obj;
@@ -479,11 +529,17 @@ public class XfaForm
         /// <returns> true  if a similitude was found</returns>
         public bool IsSimilar(string name)
         {
-            var idx = name.IndexOf("[", StringComparison.Ordinal);
-            name = name.Substring(0, idx + 1);
+            if (name == null)
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
+
+            var idx = name.IndexOf(value: '[', StringComparison.Ordinal);
+            name = name.Substring(startIndex: 0, idx + 1);
+
             foreach (var n in Part)
             {
-                if (n.StartsWith(name))
+                if (n.StartsWith(name, StringComparison.Ordinal))
                 {
                     return true;
                 }
@@ -532,6 +588,7 @@ public class XfaForm
 
             var ret = this[Count - 1];
             RemoveAt(Count - 1);
+
             return ret;
         }
 
@@ -543,6 +600,7 @@ public class XfaForm
         public T Push(T item)
         {
             Add(item);
+
             return item;
         }
     }
@@ -614,7 +672,13 @@ public class XfaForm
         /// <returns>the escaped string</returns>
         public static string EscapeSom(string s)
         {
-            var idx = s.IndexOf(".", StringComparison.Ordinal);
+            if (s == null)
+            {
+                throw new ArgumentNullException(nameof(s));
+            }
+
+            var idx = s.IndexOf(value: '.', StringComparison.Ordinal);
+
             if (idx < 0)
             {
                 return s;
@@ -622,15 +686,17 @@ public class XfaForm
 
             var sb = new StringBuilder();
             var last = 0;
+
             while (idx >= 0)
             {
                 sb.Append(s.Substring(last, idx - last));
-                sb.Append('\\');
+                sb.Append(value: '\\');
                 last = idx;
-                idx = s.IndexOf(".", idx + 1, StringComparison.Ordinal);
+                idx = s.IndexOf(value: '.', idx + 1);
             }
 
             sb.Append(s.Substring(last));
+
             return sb.ToString();
         }
 
@@ -641,7 +707,13 @@ public class XfaForm
         /// <returns>the short name</returns>
         public static string GetShortName(string s)
         {
-            var idx = s.IndexOf(".#subform[", StringComparison.OrdinalIgnoreCase);
+            if (s == null)
+            {
+                throw new ArgumentNullException(nameof(s));
+            }
+
+            var idx = s.IndexOf(value: ".#subform[", StringComparison.OrdinalIgnoreCase);
+
             if (idx < 0)
             {
                 return s;
@@ -649,20 +721,23 @@ public class XfaForm
 
             var last = 0;
             var sb = new StringBuilder();
+
             while (idx >= 0)
             {
                 sb.Append(s.Substring(last, idx - last));
-                idx = s.IndexOf("]", idx + 10, StringComparison.Ordinal);
+                idx = s.IndexOf(value: ']', idx + 10);
+
                 if (idx < 0)
                 {
                     return sb.ToString();
                 }
 
                 last = idx + 1;
-                idx = s.IndexOf(".#subform[", last, StringComparison.OrdinalIgnoreCase);
+                idx = s.IndexOf(value: ".#subform[", last, StringComparison.OrdinalIgnoreCase);
             }
 
             sb.Append(s.Substring(last));
+
             return sb.ToString();
         }
 
@@ -673,10 +748,22 @@ public class XfaForm
         /// <param name="stack">the stack with the separeted SOM parts</param>
         /// <param name="unstack">the full name</param>
         public static void InverseSearchAdd(INullValueDictionary<string, InverseStore> inverseSearch,
-                                            Stack2<string> stack, string unstack)
+            Stack2<string> stack,
+            string unstack)
         {
+            if (inverseSearch == null)
+            {
+                throw new ArgumentNullException(nameof(inverseSearch));
+            }
+
+            if (stack == null)
+            {
+                throw new ArgumentNullException(nameof(stack));
+            }
+
             var last = stack.Peek();
             var store = inverseSearch[last];
+
             if (store == null)
             {
                 store = new InverseStore();
@@ -688,6 +775,7 @@ public class XfaForm
                 last = stack[k];
                 InverseStore store2;
                 var idx = store.Part.IndexOf(last);
+
                 if (idx < 0)
                 {
                     store.Part.Add(last);
@@ -702,7 +790,7 @@ public class XfaForm
                 store = store2;
             }
 
-            store.Part.Add("");
+            store.Part.Add(item: "");
             store.Follow.Add(unstack);
         }
 
@@ -713,21 +801,29 @@ public class XfaForm
         /// <returns>the split name</returns>
         public static Stack2<string> SplitParts(string name)
         {
-            while (name.StartsWith("."))
+            if (name == null)
             {
-                name = name.Substring(1);
+                throw new ArgumentNullException(nameof(name));
+            }
+
+            while (name.StartsWith(value: '.'))
+            {
+                name = name.Substring(startIndex: 1);
             }
 
             var parts = new Stack2<string>();
             var last = 0;
             var pos = 0;
             string part;
+
             while (true)
             {
                 pos = last;
+
                 while (true)
                 {
-                    pos = name.IndexOf(".", pos, StringComparison.Ordinal);
+                    pos = name.IndexOf(value: '.', pos);
+
                     if (pos < 0)
                     {
                         break;
@@ -749,7 +845,8 @@ public class XfaForm
                 }
 
                 part = name.Substring(last, pos - last);
-                if (!part.EndsWith("]"))
+
+                if (!part.EndsWith(value: ']'))
                 {
                     part += "[0]";
                 }
@@ -759,12 +856,14 @@ public class XfaForm
             }
 
             part = name.Substring(last);
-            if (!part.EndsWith("]"))
+
+            if (!part.EndsWith(value: ']'))
             {
                 part += "[0]";
             }
 
             parts.Add(part);
+
             return parts;
         }
 
@@ -775,7 +874,13 @@ public class XfaForm
         /// <returns>the unescaped string</returns>
         public static string UnescapeSom(string s)
         {
-            var idx = s.IndexOf("\\", StringComparison.Ordinal);
+            if (s == null)
+            {
+                throw new ArgumentNullException(nameof(s));
+            }
+
+            var idx = s.IndexOf(value: '\\', StringComparison.Ordinal);
+
             if (idx < 0)
             {
                 return s;
@@ -783,14 +888,16 @@ public class XfaForm
 
             var sb = new StringBuilder();
             var last = 0;
+
             while (idx >= 0)
             {
                 sb.Append(s.Substring(last, idx - last));
                 last = idx + 1;
-                idx = s.IndexOf("\\", idx + 1, StringComparison.Ordinal);
+                idx = s.IndexOf(value: '\\', idx + 1);
             }
 
             sb.Append(s.Substring(last));
+
             return sb.ToString();
         }
 
@@ -798,10 +905,7 @@ public class XfaForm
         ///     Adds a SOM name to the search node chain.
         /// </summary>
         /// <param name="unstack">the SOM name</param>
-        public void InverseSearchAdd(string unstack)
-        {
-            InverseSearchAdd(inverseSearch, Stack, unstack);
-        }
+        public void InverseSearchAdd(string unstack) => InverseSearchAdd(inverseSearch, Stack, unstack);
 
         /// <summary>
         ///     Searchs the SOM hiearchie from the bottom.
@@ -810,12 +914,18 @@ public class XfaForm
         /// <returns>the full name or  null  if not found</returns>
         public string InverseSearchGlobal(List<string> parts)
         {
+            if (parts == null)
+            {
+                throw new ArgumentNullException(nameof(parts));
+            }
+
             if (parts.Count == 0)
             {
                 return null;
             }
 
             var store = inverseSearch[parts[parts.Count - 1]];
+
             if (store == null)
             {
                 return null;
@@ -825,6 +935,7 @@ public class XfaForm
             {
                 var part = parts[k];
                 var idx = store.Part.IndexOf(part);
+
                 if (idx < 0)
                 {
                     if (store.IsSimilar(part))
@@ -854,12 +965,13 @@ public class XfaForm
             }
 
             var s = new StringBuilder();
+
             foreach (var part in Stack)
             {
-                s.Append('.').Append(part);
+                s.Append(value: '.').Append(part);
             }
 
-            return s.ToString(1, s.Length - 1);
+            return s.ToString(startIndex: 1, s.Length - 1);
         }
     }
 
@@ -875,6 +987,11 @@ public class XfaForm
         /// <param name="n">the datasets node</param>
         public Xml2SomDatasets(XmlNode n)
         {
+            if (n == null)
+            {
+                throw new ArgumentNullException(nameof(n));
+            }
+
             order = new List<string>();
             name2Node = new NullValueDictionary<string, XmlNode>();
             Stack = new Stack2<string>();
@@ -891,25 +1008,34 @@ public class XfaForm
         /// <returns>the new  Node  of the inserted name</returns>
         public XmlNode InsertNode(XmlNode n, string shortName)
         {
+            if (n == null)
+            {
+                throw new ArgumentNullException(nameof(n));
+            }
+
             var stack = SplitParts(shortName);
             var doc = n.OwnerDocument;
             XmlNode n2 = null;
             n = n.FirstChild;
+
             for (var k = 0; k < stack.Count; ++k)
             {
                 var part = stack[k];
-                var idx = part.LastIndexOf("[", StringComparison.Ordinal);
-                var name = part.Substring(0, idx);
+                var idx = part.LastIndexOf(value: '[');
+                var name = part.Substring(startIndex: 0, idx);
                 idx = int.Parse(part.Substring(idx + 1, part.Length - idx - 2), CultureInfo.InvariantCulture);
                 var found = -1;
+
                 for (n2 = n.FirstChild; n2 != null; n2 = n2.NextSibling)
                 {
                     if (n2.NodeType == XmlNodeType.Element)
                     {
                         var s = EscapeSom(n2.LocalName);
-                        if (s.Equals(name))
+
+                        if (s.Equals(name, StringComparison.Ordinal))
                         {
                             ++found;
+
                             if (found == idx)
                             {
                                 break;
@@ -922,7 +1048,7 @@ public class XfaForm
                 {
                     n2 = doc.CreateElement(name);
                     n2 = n.AppendChild(n2);
-                    var attr = doc.CreateNode(XmlNodeType.Attribute, "dataNode", XFA_DATA_SCHEMA);
+                    var attr = doc.CreateNode(XmlNodeType.Attribute, name: "dataNode", XFA_DATA_SCHEMA);
                     attr.Value = "dataGroup";
                     n2.Attributes.SetNamedItem(attr);
                 }
@@ -933,21 +1059,24 @@ public class XfaForm
             InverseSearchAdd(inverseSearch, stack, shortName);
             name2Node[shortName] = n2;
             order.Add(shortName);
+
             return n2;
         }
 
         private static bool hasChildren(XmlNode n)
         {
-            var dataNodeN = n.Attributes.GetNamedItem("dataNode", XFA_DATA_SCHEMA);
+            var dataNodeN = n.Attributes.GetNamedItem(localName: "dataNode", XFA_DATA_SCHEMA);
+
             if (dataNodeN != null)
             {
                 var dataNode = dataNodeN.Value;
-                if ("dataGroup".Equals(dataNode))
+
+                if ("dataGroup".Equals(dataNode, StringComparison.Ordinal))
                 {
                     return true;
                 }
 
-                if ("dataValue".Equals(dataNode))
+                if ("dataValue".Equals(dataNode, StringComparison.Ordinal))
                 {
                     return false;
                 }
@@ -959,6 +1088,7 @@ public class XfaForm
             }
 
             var n2 = n.FirstChild;
+
             while (n2 != null)
             {
                 if (n2.NodeType == XmlNodeType.Element)
@@ -976,22 +1106,25 @@ public class XfaForm
         {
             var ss = new NullValueDictionary<string, int>();
             var n2 = n.FirstChild;
+
             while (n2 != null)
             {
                 if (n2.NodeType == XmlNodeType.Element)
                 {
                     var s = EscapeSom(n2.LocalName);
                     int i;
-                    if (!ss.ContainsKey(s))
+
+                    if (!ss.TryGetValue(s, out var ssValue))
                     {
                         i = 0;
                     }
                     else
                     {
-                        i = ss[s] + 1;
+                        i = ssValue + 1;
                     }
 
                     ss[s] = i;
+
                     if (hasChildren(n2))
                     {
                         Stack.Push(s + "[" + i + "]");
@@ -1027,13 +1160,18 @@ public class XfaForm
         /// <param name="n">the template node</param>
         public Xml2SomTemplate(XmlNode n)
         {
+            if (n == null)
+            {
+                throw new ArgumentNullException(nameof(n));
+            }
+
             order = new List<string>();
             name2Node = new NullValueDictionary<string, XmlNode>();
             Stack = new Stack2<string>();
             Anform = 0;
             _templateLevel = 0;
             inverseSearch = new NullValueDictionary<string, InverseStore>();
-            processTemplate(n, null);
+            processTemplate(n, ff: null);
         }
 
         /// <summary>
@@ -1052,20 +1190,22 @@ public class XfaForm
         public string GetFieldType(string s)
         {
             var n = name2Node[s];
+
             if (n == null)
             {
                 return null;
             }
 
-            if (n.LocalName.Equals("exclGroup"))
+            if (n.LocalName.Equals(value: "exclGroup", StringComparison.Ordinal))
             {
                 return "exclGroup";
             }
 
             var ui = n.FirstChild;
+
             while (ui != null)
             {
-                if (ui.NodeType == XmlNodeType.Element && ui.LocalName.Equals("ui"))
+                if (ui.NodeType == XmlNodeType.Element && ui.LocalName.Equals(value: "ui", StringComparison.Ordinal))
                 {
                     break;
                 }
@@ -1079,10 +1219,12 @@ public class XfaForm
             }
 
             var type = ui.FirstChild;
+
             while (type != null)
             {
                 if (type.NodeType == XmlNodeType.Element &&
-                    !(type.LocalName.Equals("extras") && type.LocalName.Equals("picture")))
+                    !(type.LocalName.Equals(value: "extras", StringComparison.Ordinal) &&
+                      type.LocalName.Equals(value: "picture", StringComparison.Ordinal)))
                 {
                     return type.LocalName;
                 }
@@ -1102,16 +1244,19 @@ public class XfaForm
 
             var ss = new NullValueDictionary<string, int>();
             var n2 = n.FirstChild;
+
             while (n2 != null)
             {
                 if (n2.NodeType == XmlNodeType.Element)
                 {
                     var s = n2.LocalName;
-                    if (s.Equals("subform"))
+
+                    if (s.Equals(value: "subform", StringComparison.Ordinal))
                     {
-                        var name = n2.Attributes.GetNamedItem("name");
+                        var name = n2.Attributes.GetNamedItem(name: "name");
                         var nn = "#subform";
                         var annon = true;
+
                         if (name != null)
                         {
                             nn = EscapeSom(name.Value);
@@ -1119,6 +1264,7 @@ public class XfaForm
                         }
 
                         int i;
+
                         if (annon)
                         {
                             i = Anform;
@@ -1126,13 +1272,13 @@ public class XfaForm
                         }
                         else
                         {
-                            if (!ss.ContainsKey(nn))
+                            if (!ss.TryGetValue(nn, out var ssValue))
                             {
                                 i = 0;
                             }
                             else
                             {
-                                i = ss[nn] + 1;
+                                i = ssValue + 1;
                             }
 
                             ss[nn] = i;
@@ -1140,32 +1286,36 @@ public class XfaForm
 
                         Stack.Push(nn + "[" + i + "]");
                         ++_templateLevel;
+
                         if (annon)
                         {
                             processTemplate(n2, ff);
                         }
                         else
                         {
-                            processTemplate(n2, null);
+                            processTemplate(n2, ff: null);
                         }
 
                         --_templateLevel;
                         Stack.Pop();
                     }
-                    else if (s.Equals("field") || s.Equals("exclGroup"))
+                    else if (s.Equals(value: "field", StringComparison.Ordinal) ||
+                             s.Equals(value: "exclGroup", StringComparison.Ordinal))
                     {
-                        var name = n2.Attributes.GetNamedItem("name");
+                        var name = n2.Attributes.GetNamedItem(name: "name");
+
                         if (name != null)
                         {
                             var nn = EscapeSom(name.Value);
                             int i;
-                            if (!ff.ContainsKey(nn))
+
+                            if (!ff.TryGetValue(nn, out var ffValue))
                             {
                                 i = 0;
                             }
                             else
                             {
-                                i = ff[nn] + 1;
+                                i = ffValue + 1;
                             }
 
                             ff[nn] = i;
@@ -1177,12 +1327,13 @@ public class XfaForm
                             Stack.Pop();
                         }
                     }
-                    else if (!DynamicForm && _templateLevel > 0 && s.Equals("occur"))
+                    else if (!DynamicForm && _templateLevel > 0 && s.Equals(value: "occur", StringComparison.Ordinal))
                     {
                         var initial = 1;
                         var min = 1;
                         var max = 1;
-                        var a = n2.Attributes.GetNamedItem("initial");
+                        var a = n2.Attributes.GetNamedItem(name: "initial");
+
                         if (a != null)
                         {
                             try
@@ -1195,7 +1346,8 @@ public class XfaForm
                         }
 
                         ;
-                        a = n2.Attributes.GetNamedItem("min");
+                        a = n2.Attributes.GetNamedItem(name: "min");
+
                         if (a != null)
                         {
                             try
@@ -1208,7 +1360,8 @@ public class XfaForm
                         }
 
                         ;
-                        a = n2.Attributes.GetNamedItem("max");
+                        a = n2.Attributes.GetNamedItem(name: "max");
+
                         if (a != null)
                         {
                             try
@@ -1221,6 +1374,7 @@ public class XfaForm
                         }
 
                         ;
+
                         if (initial != min || min != max)
                         {
                             DynamicForm = true;

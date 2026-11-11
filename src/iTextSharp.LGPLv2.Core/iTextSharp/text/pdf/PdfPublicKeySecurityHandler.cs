@@ -24,11 +24,7 @@ public class PdfPublicKeySecurityHandler
 
     public PdfPublicKeySecurityHandler() => _seed = IvGenerator.GetIv(SeedLength);
 
-
-    public void AddRecipient(PdfPublicKeyRecipient recipient)
-    {
-        _recipients.Add(recipient);
-    }
+    public void AddRecipient(PdfPublicKeyRecipient recipient) => _recipients.Add(recipient);
 
     public byte[] GetEncodedRecipient(int index)
     {
@@ -42,11 +38,11 @@ public class PdfPublicKeySecurityHandler
         }
 
         var certificate = recipient.Certificate;
+
         var permission =
             recipient.Permission; //PdfWriter.AllowCopy | PdfWriter.AllowPrinting | PdfWriter.AllowScreenReaders | PdfWriter.AllowAssembly;
-        var revision = 3;
 
-        permission |= (int)(revision == 3 ? 0xfffff0c0 : 0xffffffc0);
+        permission |= unchecked((int)0xfffff0c0);
         permission &= unchecked((int)0xfffffffc);
         permission += 1;
 
@@ -57,7 +53,8 @@ public class PdfPublicKeySecurityHandler
         var three = (byte)(permission >> 16);
         var four = (byte)(permission >> 24);
 
-        Array.Copy(_seed, 0, pkcs7Input, 0, 20); // put this seed in the pkcs7 input
+        Array.Copy(_seed, sourceIndex: 0, pkcs7Input, destinationIndex: 0,
+            length: 20); // put this seed in the pkcs7 input
 
         pkcs7Input[20] = four;
         pkcs7Input[21] = three;
@@ -65,15 +62,10 @@ public class PdfPublicKeySecurityHandler
         pkcs7Input[23] = one;
 
         var obj = createDerForRecipient(pkcs7Input, certificate);
-
-        var baos = new MemoryStream();
-
-        var k = Asn1OutputStream.Create(baos, Asn1Encodable.Der);
-
+        using var baos = new MemoryStream();
+        using var k = Asn1OutputStream.Create(baos, Asn1Encodable.Der);
         k.WriteObject(obj);
-
         cms = baos.ToArray();
-
         recipient.Cms = cms;
 
         return cms;
@@ -83,6 +75,7 @@ public class PdfPublicKeySecurityHandler
     {
         var encodedRecipients = new PdfArray();
         byte[] cms = null;
+
         for (var i = 0; i < _recipients.Count; i++)
         {
             try
@@ -101,60 +94,61 @@ public class PdfPublicKeySecurityHandler
 
     public int GetRecipientsSize() => _recipients.Count;
 
-    protected internal byte[] GetSeed() => (byte[])_seed.Clone();
+    internal protected byte[] GetSeed() => (byte[])_seed.Clone();
 
-    private KeyTransRecipientInfo computeRecipientInfo(X509Certificate x509Certificate, byte[] abyte0)
+    private static KeyTransRecipientInfo computeRecipientInfo(X509Certificate x509Certificate, byte[] abyte0)
     {
-        var asn1Inputstream =
-            new Asn1InputStream(new MemoryStream(x509Certificate.GetTbsCertificate()));
-        var tbscertificatestructure =
-            TbsCertificateStructure.GetInstance(asn1Inputstream.ReadObject());
-        var algorithmidentifier = tbscertificatestructure.SubjectPublicKeyInfo.AlgorithmID;
+        using var memoryStream = new MemoryStream(x509Certificate.GetTbsCertificate());
+        using var asn1Inputstream = new Asn1InputStream(memoryStream);
+        var tbscertificatestructure = TbsCertificateStructure.GetInstance(asn1Inputstream.ReadObject());
+        var algorithmidentifier = tbscertificatestructure.SubjectPublicKeyInfo.Algorithm;
+
         var issuerandserialnumber =
-            new IssuerAndSerialNumber(
-                                      tbscertificatestructure.Issuer,
-                                      tbscertificatestructure.SerialNumber.Value);
+            new IssuerAndSerialNumber(tbscertificatestructure.Issuer, tbscertificatestructure.SerialNumber.Value);
+
         var cipher = CipherUtilities.GetCipher(algorithmidentifier.Algorithm);
-        cipher.Init(true, x509Certificate.GetPublicKey());
+        cipher.Init(forEncryption: true, x509Certificate.GetPublicKey());
         var outp = new byte[10000];
-        var len = cipher.DoFinal(abyte0, outp, 0);
+        var len = cipher.DoFinal(abyte0, outp, outOff: 0);
         var abyte1 = new byte[len];
-        Array.Copy(outp, 0, abyte1, 0, len);
+        Array.Copy(outp, sourceIndex: 0, abyte1, destinationIndex: 0, len);
         var deroctetstring = new DerOctetString(abyte1);
         var recipId = new RecipientIdentifier(issuerandserialnumber);
+
         return new KeyTransRecipientInfo(recipId, algorithmidentifier, deroctetstring);
     }
 
-    private Asn1Object createDerForRecipient(byte[] inp, X509Certificate cert)
+    private static Asn1Object createDerForRecipient(byte[] inp, X509Certificate cert)
     {
         var s = "1.2.840.113549.3.2";
 
         var outp = new byte[100];
         var derob = new DerObjectIdentifier(s);
-        var keyp = IvGenerator.GetIv(16);
+        var keyp = IvGenerator.GetIv(len: 16);
         var cf = CipherUtilities.GetCipher(derob);
         var kp = new KeyParameter(keyp);
         var iv = IvGenerator.GetIv(cf.GetBlockSize());
         var piv = new ParametersWithIV(kp, iv);
-        cf.Init(true, piv);
-        var len = cf.DoFinal(inp, outp, 0);
+        cf.Init(forEncryption: true, piv);
+        var len = cf.DoFinal(inp, outp, outOff: 0);
 
         var abyte1 = new byte[len];
-        Array.Copy(outp, 0, abyte1, 0, len);
+        Array.Copy(outp, sourceIndex: 0, abyte1, destinationIndex: 0, len);
         var deroctetstring = new DerOctetString(abyte1);
         var keytransrecipientinfo = computeRecipientInfo(cert, keyp);
         var derset = new DerSet(new RecipientInfo(keytransrecipientinfo));
         var ev = new Asn1EncodableVector();
-        ev.Add(new DerInteger(58));
+        ev.Add(DerInteger.ValueOf(value: 58));
         ev.Add(new DerOctetString(iv));
         var seq = new DerSequence(ev);
         var algorithmidentifier = new AlgorithmIdentifier(derob, seq);
+
         var encryptedcontentinfo =
             new EncryptedContentInfo(PkcsObjectIdentifiers.Data, algorithmidentifier, deroctetstring);
 
-        var env = new EnvelopedData(null, derset, encryptedcontentinfo, (Asn1Set)null);
-        var contentinfo =
-            new ContentInfo(PkcsObjectIdentifiers.EnvelopedData, env);
+        var env = new EnvelopedData(originatorInfo: null, derset, encryptedcontentinfo, (Asn1Set)null);
+        var contentinfo = new ContentInfo(PkcsObjectIdentifiers.EnvelopedData, env);
+
         return contentinfo.ToAsn1Object();
     }
 }

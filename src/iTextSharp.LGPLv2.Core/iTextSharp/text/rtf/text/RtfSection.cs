@@ -30,7 +30,18 @@ public class RtfSection : RtfElement
     /// <param name="section">The Section this RtfSection is based on</param>
     public RtfSection(RtfDocument doc, Section section) : base(doc)
     {
+        if (doc == null)
+        {
+            throw new ArgumentNullException(nameof(doc));
+        }
+
+        if (section == null)
+        {
+            throw new ArgumentNullException(nameof(section));
+        }
+
         Items = new List<IRtfBasicElement>();
+
         try
         {
             if (section.Title != null)
@@ -41,6 +52,7 @@ public class RtfSection : RtfElement
             if (Document.GetAutogenerateTocEntries())
             {
                 var titleText = new StringBuilder();
+
                 foreach (var element in section.Title)
                 {
                     if (element.Type == Element.CHUNK)
@@ -57,9 +69,10 @@ public class RtfSection : RtfElement
                 }
             }
 
-            foreach (IElement element in section)
+            foreach (var element in section)
             {
                 var rtfElements = doc.GetMapper().MapElement(element);
+
                 for (var i = 0; i < rtfElements.Length; i++)
                 {
                     if (rtfElements[i] != null)
@@ -84,6 +97,7 @@ public class RtfSection : RtfElement
     public override void SetInHeader(bool inHeader)
     {
         base.SetInHeader(inHeader);
+
         for (var i = 0; i < Items.Count; i++)
         {
             Items[i].SetInHeader(inHeader);
@@ -98,6 +112,7 @@ public class RtfSection : RtfElement
     public override void SetInTable(bool inTable)
     {
         base.SetInTable(inTable);
+
         for (var i = 0; i < Items.Count; i++)
         {
             Items[i].SetInTable(inTable);
@@ -107,17 +122,23 @@ public class RtfSection : RtfElement
     /// <summary>
     ///     Write this RtfSection and its contents
     /// </summary>
-    public override void WriteContent(Stream result)
+    public override void WriteContent(Stream outp)
     {
-        result.Write(RtfParagraph.Paragraph, 0, RtfParagraph.Paragraph.Length);
+        if (outp == null)
+        {
+            throw new ArgumentNullException(nameof(outp));
+        }
+
+        outp.Write(RtfParagraph.Paragraph, offset: 0, RtfParagraph.Paragraph.Length);
+
         if (Title != null)
         {
-            Title.WriteContent(result);
+            Title.WriteContent(outp);
         }
 
         foreach (var rbe in Items)
         {
-            rbe.WriteContent(result);
+            rbe.WriteContent(outp);
         }
     }
 
@@ -139,16 +160,15 @@ public class RtfSection : RtfElement
         for (var i = 0; i < Items.Count; i++)
         {
             var rtfElement = Items[i];
-            if (rtfElement is RtfSection)
+
+            if (rtfElement is RtfSection rtfSection)
             {
-                ((RtfSection)rtfElement).updateIndentation(indentLeft + indentContent, indentRight, 0);
+                rtfSection.updateIndentation(indentLeft + indentContent, indentRight, indentContent: 0);
             }
-            else if (rtfElement is RtfParagraph)
+            else if (rtfElement is RtfParagraph paragraph)
             {
-                ((RtfParagraph)rtfElement).SetIndentLeft((int)(((RtfParagraph)rtfElement).GetIndentLeft() +
-                                                               (indentLeft + indentContent) * TWIPS_FACTOR));
-                ((RtfParagraph)rtfElement).SetIndentRight((int)(((RtfParagraph)rtfElement).GetIndentRight() +
-                                                                indentRight * TWIPS_FACTOR));
+                paragraph.SetIndentLeft((int)(paragraph.GetIndentLeft() + (indentLeft + indentContent) * TWIPS_FACTOR));
+                paragraph.SetIndentRight((int)(paragraph.GetIndentRight() + indentRight * TWIPS_FACTOR));
             }
         }
     }

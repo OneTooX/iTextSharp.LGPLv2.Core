@@ -109,21 +109,11 @@ public class BmpImage
     /// <returns>the image</returns>
     public static Image GetImage(Uri url)
     {
-        Stream isp = null;
-        try
-        {
-            isp = url.GetResponseStream();
-            var img = GetImage(isp);
-            img.Url = url;
-            return img;
-        }
-        finally
-        {
-            if (isp != null)
-            {
-                isp.Dispose();
-            }
-        }
+        using var isp = url.GetResponseStream();
+        var img = GetImage(isp);
+        img.Url = url;
+
+        return img;
     }
 
     /// <summary>
@@ -132,7 +122,7 @@ public class BmpImage
     /// </summary>
     /// <param name="isp">the stream</param>
     /// <returns>the image</returns>
-    public static Image GetImage(Stream isp) => GetImage(isp, false, 0);
+    public static Image GetImage(Stream isp) => GetImage(isp, noHeader: false, size: 0);
 
     /// <summary>
     ///     Reads a BMP from a stream. The stream is not closed.
@@ -149,6 +139,7 @@ public class BmpImage
         var img = bmp.getImage();
         img.SetDpi((int)(bmp._xPelsPerMeter * 0.0254 + 0.5), (int)(bmp._yPelsPerMeter * 0.0254 + 0.5));
         img.OriginalType = Image.ORIGINAL_BMP;
+
         return img;
     }
 
@@ -171,9 +162,9 @@ public class BmpImage
         Stream isp = new MemoryStream(data);
         var img = GetImage(isp);
         img.OriginalData = data;
+
         return img;
     }
-
 
     protected void Process(Stream stream, bool noHeader)
     {
@@ -189,10 +180,9 @@ public class BmpImage
         if (!noHeader)
         {
             // Start File Header
-            if (!(readUnsignedByte(_inputStream) == 'B' &&
-                  readUnsignedByte(_inputStream) == 'M'))
+            if (!(readUnsignedByte(_inputStream) == 'B' && readUnsignedByte(_inputStream) == 'M'))
             {
-                throw new Exception("Invalid magic value for BMP file.");
+                throw new InvalidOperationException(message: "Invalid magic value for BMP file.");
             }
 
             // Read file size
@@ -225,12 +215,13 @@ public class BmpImage
         var planes = readWord(_inputStream);
         _bitsPerPixel = readWord(_inputStream);
 
-        Properties["color_planes"] = planes;
-        Properties["bits_per_pixel"] = _bitsPerPixel;
+        Properties[key: "color_planes"] = planes;
+        Properties[key: "bits_per_pixel"] = _bitsPerPixel;
 
         // As BMP always has 3 rgb bands, except for Version 5,
         // which is bgra
         _numBands = 3;
+
         if (_bitmapOffset == 0)
         {
             _bitmapOffset = size;
@@ -239,7 +230,7 @@ public class BmpImage
         if (size == 12)
         {
             // Windows 2.x and OS/2 1.x
-            Properties["bmp_version"] = "BMP v. 2.x";
+            Properties[key: "bmp_version"] = "BMP v. 2.x";
 
             // Classify the image type
             if (_bitsPerPixel == 1)
@@ -262,21 +253,26 @@ public class BmpImage
             // Read in the palette
             var numberOfEntries = (int)((_bitmapOffset - 14 - size) / 3);
             var sizeOfPalette = numberOfEntries * 3;
+
             if (_bitmapOffset == size)
             {
                 switch (_imageType)
                 {
                     case Version21Bit:
                         sizeOfPalette = 2 * 3;
+
                         break;
                     case Version24Bit:
                         sizeOfPalette = 16 * 3;
+
                         break;
                     case Version28Bit:
                         sizeOfPalette = 256 * 3;
+
                         break;
                     case Version224Bit:
                         sizeOfPalette = 0;
+
                         break;
                 }
 
@@ -297,26 +293,30 @@ public class BmpImage
             switch ((int)_compression)
             {
                 case BiRgb:
-                    Properties["compression"] = "BI_RGB";
+                    Properties[key: "compression"] = "BI_RGB";
+
                     break;
 
                 case BiRle8:
-                    Properties["compression"] = "BI_RLE8";
+                    Properties[key: "compression"] = "BI_RLE8";
+
                     break;
 
                 case BiRle4:
-                    Properties["compression"] = "BI_RLE4";
+                    Properties[key: "compression"] = "BI_RLE4";
+
                     break;
 
                 case BiBitfields:
-                    Properties["compression"] = "BI_BITFIELDS";
+                    Properties[key: "compression"] = "BI_BITFIELDS";
+
                     break;
             }
 
-            Properties["x_pixels_per_meter"] = _xPelsPerMeter;
-            Properties["y_pixels_per_meter"] = _yPelsPerMeter;
-            Properties["colors_used"] = colorsUsed;
-            Properties["colors_important"] = colorsImportant;
+            Properties[key: "x_pixels_per_meter"] = _xPelsPerMeter;
+            Properties[key: "y_pixels_per_meter"] = _yPelsPerMeter;
+            Properties[key: "colors_used"] = colorsUsed;
+            Properties[key: "colors_important"] = colorsImportant;
 
             if (size == 40)
             {
@@ -349,9 +349,9 @@ public class BmpImage
                             _redMask = 0x7C00;
                             _greenMask = 0x3E0;
                             _blueMask = 0x1F;
-                            Properties["red_mask"] = _redMask;
-                            Properties["green_mask"] = _greenMask;
-                            Properties["blue_mask"] = _blueMask;
+                            Properties[key: "red_mask"] = _redMask;
+                            Properties[key: "green_mask"] = _greenMask;
+                            Properties[key: "blue_mask"] = _blueMask;
                         }
                         else if (_bitsPerPixel == 32)
                         {
@@ -359,29 +359,34 @@ public class BmpImage
                             _redMask = 0x00FF0000;
                             _greenMask = 0x0000FF00;
                             _blueMask = 0x000000FF;
-                            Properties["red_mask"] = _redMask;
-                            Properties["green_mask"] = _greenMask;
-                            Properties["blue_mask"] = _blueMask;
+                            Properties[key: "red_mask"] = _redMask;
+                            Properties[key: "green_mask"] = _greenMask;
+                            Properties[key: "blue_mask"] = _blueMask;
                         }
 
                         // Read in the palette
                         var numberOfEntries = (int)((_bitmapOffset - 14 - size) / 4);
                         var sizeOfPalette = numberOfEntries * 4;
+
                         if (_bitmapOffset == size)
                         {
                             switch (_imageType)
                             {
                                 case Version31Bit:
                                     sizeOfPalette = (int)(colorsUsed == 0 ? 2 : colorsUsed) * 4;
+
                                     break;
                                 case Version34Bit:
                                     sizeOfPalette = (int)(colorsUsed == 0 ? 16 : colorsUsed) * 4;
+
                                     break;
                                 case Version38Bit:
                                     sizeOfPalette = (int)(colorsUsed == 0 ? 256 : colorsUsed) * 4;
+
                                     break;
                                 default:
                                     sizeOfPalette = 0;
+
                                     break;
                             }
 
@@ -389,7 +394,8 @@ public class BmpImage
                         }
 
                         readPalette(sizeOfPalette);
-                        Properties["bmp_version"] = "BMP v. 3.x";
+                        Properties[key: "bmp_version"] = "BMP v. 3.x";
+
                         break;
 
                     case BiBitfields:
@@ -408,9 +414,9 @@ public class BmpImage
                         _greenMask = (int)readDWord(_inputStream);
                         _blueMask = (int)readDWord(_inputStream);
 
-                        Properties["red_mask"] = _redMask;
-                        Properties["green_mask"] = _greenMask;
-                        Properties["blue_mask"] = _blueMask;
+                        Properties[key: "red_mask"] = _redMask;
+                        Properties[key: "green_mask"] = _greenMask;
+                        Properties[key: "blue_mask"] = _blueMask;
 
                         if (colorsUsed != 0)
                         {
@@ -419,24 +425,25 @@ public class BmpImage
                             readPalette(sizeOfPalette);
                         }
 
-                        Properties["bmp_version"] = "BMP v. 3.x NT";
+                        Properties[key: "bmp_version"] = "BMP v. 3.x NT";
+
                         break;
 
                     default:
-                        throw new
-                            Exception("Invalid compression specified in BMP file.");
+                        throw new InvalidOperationException(message: "Invalid compression specified in BMP file.");
                 }
             }
             else if (size == 108)
             {
                 // Windows 4.x BMP
 
-                Properties["bmp_version"] = "BMP v. 4.x";
+                Properties[key: "bmp_version"] = "BMP v. 4.x";
 
                 // rgb masks, valid only if comp is BI_BITFIELDS
                 _redMask = (int)readDWord(_inputStream);
                 _greenMask = (int)readDWord(_inputStream);
                 _blueMask = (int)readDWord(_inputStream);
+
                 // Only supported for 32bpp BI_RGB argb
                 _alphaMask = (int)readDWord(_inputStream);
                 var csType = readDWord(_inputStream);
@@ -468,6 +475,7 @@ public class BmpImage
                 else if (_bitsPerPixel == 16)
                 {
                     _imageType = Version416Bit;
+
                     if ((int)_compression == BiRgb)
                     {
                         _redMask = 0x7C00;
@@ -482,6 +490,7 @@ public class BmpImage
                 else if (_bitsPerPixel == 32)
                 {
                     _imageType = Version432Bit;
+
                     if ((int)_compression == BiRgb)
                     {
                         _redMask = 0x00FF0000;
@@ -490,29 +499,34 @@ public class BmpImage
                     }
                 }
 
-                Properties["red_mask"] = _redMask;
-                Properties["green_mask"] = _greenMask;
-                Properties["blue_mask"] = _blueMask;
-                Properties["alpha_mask"] = _alphaMask;
+                Properties[key: "red_mask"] = _redMask;
+                Properties[key: "green_mask"] = _greenMask;
+                Properties[key: "blue_mask"] = _blueMask;
+                Properties[key: "alpha_mask"] = _alphaMask;
 
                 // Read in the palette
                 var numberOfEntries = (int)((_bitmapOffset - 14 - size) / 4);
                 var sizeOfPalette = numberOfEntries * 4;
+
                 if (_bitmapOffset == size)
                 {
                     switch (_imageType)
                     {
                         case Version41Bit:
                             sizeOfPalette = (int)(colorsUsed == 0 ? 2 : colorsUsed) * 4;
+
                             break;
                         case Version44Bit:
                             sizeOfPalette = (int)(colorsUsed == 0 ? 16 : colorsUsed) * 4;
+
                             break;
                         case Version48Bit:
                             sizeOfPalette = (int)(colorsUsed == 0 ? 256 : colorsUsed) * 4;
+
                             break;
                         default:
                             sizeOfPalette = 0;
+
                             break;
                     }
 
@@ -525,41 +539,41 @@ public class BmpImage
                 {
                     case LcsCalibratedRgb:
                         // All the new fields are valid only for this case
-                        Properties["color_space"] = "LCS_CALIBRATED_RGB";
-                        Properties["redX"] = redX;
-                        Properties["redY"] = redY;
-                        Properties["redZ"] = redZ;
-                        Properties["greenX"] = greenX;
-                        Properties["greenY"] = greenY;
-                        Properties["greenZ"] = greenZ;
-                        Properties["blueX"] = blueX;
-                        Properties["blueY"] = blueY;
-                        Properties["blueZ"] = blueZ;
-                        Properties["gamma_red"] = gammaRed;
-                        Properties["gamma_green"] = gammaGreen;
-                        Properties["gamma_blue"] = gammaBlue;
+                        Properties[key: "color_space"] = "LCS_CALIBRATED_RGB";
+                        Properties[key: "redX"] = redX;
+                        Properties[key: "redY"] = redY;
+                        Properties[key: "redZ"] = redZ;
+                        Properties[key: "greenX"] = greenX;
+                        Properties[key: "greenY"] = greenY;
+                        Properties[key: "greenZ"] = greenZ;
+                        Properties[key: "blueX"] = blueX;
+                        Properties[key: "blueY"] = blueY;
+                        Properties[key: "blueZ"] = blueZ;
+                        Properties[key: "gamma_red"] = gammaRed;
+                        Properties[key: "gamma_green"] = gammaGreen;
+                        Properties[key: "gamma_blue"] = gammaBlue;
 
                         // break;
-                        throw new
-                            Exception("Not implemented yet.");
+                        throw new NotSupportedException(message: "Not implemented yet.");
 
                     case Lcs_SRgb:
                         // Default Windows color space
-                        Properties["color_space"] = "LCS_sRGB";
+                        Properties[key: "color_space"] = "LCS_sRGB";
+
                         break;
 
                     case LcsCmyk:
-                        Properties["color_space"] = "LCS_CMYK";
+                        Properties[key: "color_space"] = "LCS_CMYK";
+
                         //		    break;
-                        throw new
-                            Exception("Not implemented yet.");
+                        throw new NotSupportedException(message: "Not implemented yet.");
                 }
             }
             else
             {
-                Properties["bmp_version"] = "BMP v. 5.x";
-                throw new
-                    Exception("BMP version 5 not implemented yet.");
+                Properties[key: "bmp_version"] = "BMP v. 5.x";
+
+                throw new NotSupportedException(message: "BMP version 5 not implemented yet.");
             }
         }
 
@@ -580,15 +594,13 @@ public class BmpImage
         {
             _numBands = 1;
 
-
             // Create IndexColorModel from the palette.
             byte[] r;
             byte[] g;
             byte[] b;
             int sizep;
-            if (_imageType == Version21Bit ||
-                _imageType == Version24Bit ||
-                _imageType == Version28Bit)
+
+            if (_imageType == Version21Bit || _imageType == Version24Bit || _imageType == Version28Bit)
             {
                 sizep = _palette.Length / 3;
 
@@ -601,6 +613,7 @@ public class BmpImage
                 r = new byte[sizep];
                 g = new byte[sizep];
                 b = new byte[sizep];
+
                 for (var i = 0; i < sizep; i++)
                 {
                     off = 3 * i;
@@ -622,6 +635,7 @@ public class BmpImage
                 r = new byte[sizep];
                 g = new byte[sizep];
                 b = new byte[sizep];
+
                 for (var i = 0; i < sizep; i++)
                 {
                     off = 4 * i;
@@ -648,18 +662,22 @@ public class BmpImage
     private byte[] decodeRle(bool is8, byte[] values)
     {
         var val = new byte[_width * _height];
+
         try
         {
             var ptr = 0;
             var x = 0;
             var q = 0;
+
             for (var y = 0; y < _height && ptr < values.Length;)
             {
                 var count = values[ptr++] & 0xff;
+
                 if (count != 0)
                 {
                     // encoded mode
                     var bt = values[ptr++] & 0xff;
+
                     if (is8)
                     {
                         for (var i = count; i != 0; --i)
@@ -681,6 +699,7 @@ public class BmpImage
                 {
                     // escape mode
                     count = values[ptr++] & 0xff;
+
                     if (count == 1)
                     {
                         break;
@@ -692,12 +711,14 @@ public class BmpImage
                             x = 0;
                             ++y;
                             q = y * _width;
+
                             break;
                         case 2:
                             // delta mode
                             x += values[ptr++] & 0xff;
                             y += values[ptr++] & 0xff;
                             q = y * _width + x;
+
                             break;
                         default:
                             // absolute mode
@@ -711,6 +732,7 @@ public class BmpImage
                             else
                             {
                                 var bt = 0;
+
                                 for (var i = 0; i < count; ++i)
                                 {
                                     if ((i & 1) == 0)
@@ -723,6 +745,7 @@ public class BmpImage
                             }
 
                             x += count;
+
                             // read pad byte
                             if (is8)
                             {
@@ -752,9 +775,10 @@ public class BmpImage
         return val;
     }
 
-    private int findMask(int mask)
+    private static int findMask(int mask)
     {
         var k = 0;
+
         for (; k < 32; ++k)
         {
             if ((mask & 1) == 1)
@@ -762,15 +786,16 @@ public class BmpImage
                 break;
             }
 
-            mask = Util.Usr(mask, 1);
+            mask = Util.Usr(mask, op2: 1);
         }
 
         return mask;
     }
 
-    private int findShift(int mask)
+    private static int findShift(int mask)
     {
         var k = 0;
+
         for (; k < 32; ++k)
         {
             if ((mask & 1) == 1)
@@ -778,7 +803,7 @@ public class BmpImage
                 break;
             }
 
-            mask = Util.Usr(mask, 1);
+            mask = Util.Usr(mask, op2: 1);
         }
 
         return k;
@@ -787,6 +812,7 @@ public class BmpImage
     private Image getImage()
     {
         byte[] bdata = null; // buffer for byte data
+
         //short[] sdata = null; // buffer for short data
         //int[] idata = null; // buffer for int data
 
@@ -802,107 +828,106 @@ public class BmpImage
         {
             case Version21Bit:
                 // no compression
-                return read1Bit(3);
+                return read1Bit(paletteEntries: 3);
 
             case Version24Bit:
                 // no compression
-                return read4Bit(3);
+                return read4Bit(paletteEntries: 3);
 
             case Version28Bit:
                 // no compression
-                return read8Bit(3);
+                return read8Bit(paletteEntries: 3);
 
             case Version224Bit:
                 // no compression
                 bdata = new byte[_width * _height * 3];
                 read24Bit(bdata);
-                return new ImgRaw(_width, _height, 3, 8, bdata);
+
+                return new ImgRaw(_width, _height, components: 3, bpc: 8, bdata);
 
             case Version31Bit:
                 // 1-bit images cannot be compressed.
-                return read1Bit(4);
+                return read1Bit(paletteEntries: 4);
 
             case Version34Bit:
                 switch ((int)_compression)
                 {
                     case BiRgb:
-                        return read4Bit(4);
+                        return read4Bit(paletteEntries: 4);
 
                     case BiRle4:
                         return readRle4();
 
                     default:
-                        throw new
-                            Exception("Invalid compression specified for BMP file.");
+                        throw new InvalidOperationException(message: "Invalid compression specified for BMP file.");
                 }
 
             case Version38Bit:
                 switch ((int)_compression)
                 {
                     case BiRgb:
-                        return read8Bit(4);
+                        return read8Bit(paletteEntries: 4);
 
                     case BiRle8:
                         return readRle8();
 
                     default:
-                        throw new
-                            Exception("Invalid compression specified for BMP file.");
+                        throw new InvalidOperationException(message: "Invalid compression specified for BMP file.");
                 }
 
             case Version324Bit:
                 // 24-bit images are not compressed
                 bdata = new byte[_width * _height * 3];
                 read24Bit(bdata);
-                return new ImgRaw(_width, _height, 3, 8, bdata);
+
+                return new ImgRaw(_width, _height, components: 3, bpc: 8, bdata);
 
             case Version3Nt16Bit:
-                return read1632Bit(false);
+                return read1632Bit(is32: false);
 
             case Version3Nt32Bit:
-                return read1632Bit(true);
+                return read1632Bit(is32: true);
 
             case Version41Bit:
-                return read1Bit(4);
+                return read1Bit(paletteEntries: 4);
 
             case Version44Bit:
                 switch ((int)_compression)
                 {
                     case BiRgb:
-                        return read4Bit(4);
+                        return read4Bit(paletteEntries: 4);
 
                     case BiRle4:
                         return readRle4();
 
                     default:
-                        throw new
-                            Exception("Invalid compression specified for BMP file.");
+                        throw new InvalidOperationException(message: "Invalid compression specified for BMP file.");
                 }
 
             case Version48Bit:
                 switch ((int)_compression)
                 {
                     case BiRgb:
-                        return read8Bit(4);
+                        return read8Bit(paletteEntries: 4);
 
                     case BiRle8:
                         return readRle8();
 
                     default:
-                        throw new
-                            Exception("Invalid compression specified for BMP file.");
+                        throw new InvalidOperationException(message: "Invalid compression specified for BMP file.");
                 }
 
             case Version416Bit:
-                return read1632Bit(false);
+                return read1632Bit(is32: false);
 
             case Version424Bit:
                 bdata = new byte[_width * _height * 3];
                 read24Bit(bdata);
-                return new ImgRaw(_width, _height, 3, 8, bdata);
+
+                return new ImgRaw(_width, _height, components: 3, bpc: 8, bdata);
 
             case Version432Bit:
-                return read1632Bit(true);
+                return read1632Bit(is32: true);
         }
 
         return null;
@@ -912,11 +937,12 @@ public class BmpImage
     {
         if (_palette == null)
         {
-            return new byte[0];
+            return Array.Empty<byte>();
         }
 
         var np = new byte[_palette.Length / group * 3];
         var e = _palette.Length / group;
+
         for (var k = 0; k < e; ++k)
         {
             var src = k * group;
@@ -931,7 +957,7 @@ public class BmpImage
 
     private Image indexedModel(byte[] bdata, int bpc, int paletteEntries)
     {
-        Image img = new ImgRaw(_width, _height, 1, bpc, bdata);
+        Image img = new ImgRaw(_width, _height, components: 1, bpc, bdata);
         var colorspace = new PdfArray();
         colorspace.Add(PdfName.Indexed);
         colorspace.Add(PdfName.Devicergb);
@@ -942,10 +968,11 @@ public class BmpImage
         var ad = new PdfDictionary();
         ad.Put(PdfName.Colorspace, colorspace);
         img.Additional = ad;
+
         return img;
     }
 
-    private Image read1632Bit(bool is32)
+    private ImgRaw read1632Bit(bool is32)
     {
         var red_mask = findMask(_redMask);
         var redShift = findShift(_redMask);
@@ -957,6 +984,7 @@ public class BmpImage
         var blueShift = findShift(_blueMask);
         var blueFactor = blue_mask + 1;
         var bdata = new byte[_width * _height * 3];
+
         // Padding bytes at the end of each scanline
         var padding = 0;
 
@@ -964,6 +992,7 @@ public class BmpImage
         {
             // width * bitsPerPixel should be divisible by 32
             var bitsPerScanline = _width * 16;
+
             if (bitsPerScanline % 32 != 0)
             {
                 padding = (bitsPerScanline / 32 + 1) * 32 - bitsPerScanline;
@@ -972,6 +1001,7 @@ public class BmpImage
         }
 
         var imSize = (int)_imageSize;
+
         if (imSize == 0)
         {
             imSize = (int)(_bitmapFileSize - _bitmapOffset);
@@ -979,11 +1009,13 @@ public class BmpImage
 
         var l = 0;
         int v;
+
         if (_isBottomUp)
         {
             for (var i = _height - 1; i >= 0; --i)
             {
                 l = _width * 3 * i;
+
                 for (var j = 0; j < _width; j++)
                 {
                     if (is32)
@@ -1033,7 +1065,7 @@ public class BmpImage
             }
         }
 
-        return new ImgRaw(_width, _height, 3, 8, bdata);
+        return new ImgRaw(_width, _height, components: 3, bpc: 8, bdata);
     }
 
     /// <summary>
@@ -1046,6 +1078,7 @@ public class BmpImage
         var bytesPerScanline = (int)Math.Ceiling(_width / 8.0);
 
         var remainder = bytesPerScanline % 4;
+
         if (remainder != 0)
         {
             padding = 4 - remainder;
@@ -1056,10 +1089,10 @@ public class BmpImage
         // Read till we have the whole image
         var values = new byte[imSize];
         var bytesRead = 0;
+
         while (bytesRead < imSize)
         {
-            bytesRead += _inputStream.Read(values, bytesRead,
-                                           imSize - bytesRead);
+            bytesRead += _inputStream.Read(values, bytesRead, imSize - bytesRead);
         }
 
         if (_isBottomUp)
@@ -1069,25 +1102,19 @@ public class BmpImage
 
             for (var i = 0; i < _height; i++)
             {
-                Array.Copy(values,
-                           imSize - (i + 1) * (bytesPerScanline + padding),
-                           bdata,
-                           i * bytesPerScanline, bytesPerScanline);
+                Array.Copy(values, imSize - (i + 1) * (bytesPerScanline + padding), bdata, i * bytesPerScanline,
+                    bytesPerScanline);
             }
         }
         else
         {
             for (var i = 0; i < _height; i++)
             {
-                Array.Copy(values,
-                           i * (bytesPerScanline + padding),
-                           bdata,
-                           i * bytesPerScanline,
-                           bytesPerScanline);
+                Array.Copy(values, i * (bytesPerScanline + padding), bdata, i * bytesPerScanline, bytesPerScanline);
             }
         }
 
-        return indexedModel(bdata, 1, paletteEntries);
+        return indexedModel(bdata, bpc: 1, paletteEntries);
     }
 
     /// <summary>
@@ -1100,21 +1127,23 @@ public class BmpImage
 
         // width * bitsPerPixel should be divisible by 32
         var bitsPerScanline = _width * 24;
+
         if (bitsPerScanline % 32 != 0)
         {
             padding = (bitsPerScanline / 32 + 1) * 32 - bitsPerScanline;
             padding = (int)Math.Ceiling(padding / 8.0);
         }
 
-
         var imSize = (_width * 3 + 3) / 4 * 4 * _height;
+
         // Read till we have the whole image
         var values = new byte[imSize];
         var bytesRead = 0;
+
         while (bytesRead < imSize)
         {
-            var r = _inputStream.Read(values, bytesRead,
-                                      imSize - bytesRead);
+            var r = _inputStream.Read(values, bytesRead, imSize - bytesRead);
+
             if (r < 0)
             {
                 break;
@@ -1130,10 +1159,12 @@ public class BmpImage
             var max = _width * _height * 3 - 1;
 
             count = -padding;
+
             for (var i = 0; i < _height; i++)
             {
                 l = max - (i + 1) * _width * 3 + 1;
                 count += padding;
+
                 for (var j = 0; j < _width; j++)
                 {
                     bdata[l + 2] = values[count++];
@@ -1146,9 +1177,11 @@ public class BmpImage
         else
         {
             count = -padding;
+
             for (var i = 0; i < _height; i++)
             {
                 count += padding;
+
                 for (var j = 0; j < _width; j++)
                 {
                     bdata[l + 2] = values[count++];
@@ -1172,6 +1205,7 @@ public class BmpImage
 
         var bytesPerScanline = (int)Math.Ceiling(_width / 2.0);
         var remainder = bytesPerScanline % 4;
+
         if (remainder != 0)
         {
             padding = 4 - remainder;
@@ -1182,62 +1216,7 @@ public class BmpImage
         // Read till we have the whole image
         var values = new byte[imSize];
         var bytesRead = 0;
-        while (bytesRead < imSize)
-        {
-            bytesRead += _inputStream.Read(values, bytesRead,
-                                           imSize - bytesRead);
-        }
 
-        if (_isBottomUp)
-        {
-            // Convert the bottom up image to a top down format by copying
-            // one scanline from the bottom to the top at a time.
-            for (var i = 0; i < _height; i++)
-            {
-                Array.Copy(values,
-                           imSize - (i + 1) * (bytesPerScanline + padding),
-                           bdata,
-                           i * bytesPerScanline,
-                           bytesPerScanline);
-            }
-        }
-        else
-        {
-            for (var i = 0; i < _height; i++)
-            {
-                Array.Copy(values,
-                           i * (bytesPerScanline + padding),
-                           bdata,
-                           i * bytesPerScanline,
-                           bytesPerScanline);
-            }
-        }
-
-        return indexedModel(bdata, 4, paletteEntries);
-    }
-
-    /// <summary>
-    ///     Method to read 8 bit BMP image data
-    /// </summary>
-    private Image read8Bit(int paletteEntries)
-    {
-        var bdata = new byte[_width * _height];
-        // Padding bytes at the end of each scanline
-        var padding = 0;
-
-        // width * bitsPerPixel should be divisible by 32
-        var bitsPerScanline = _width * 8;
-        if (bitsPerScanline % 32 != 0)
-        {
-            padding = (bitsPerScanline / 32 + 1) * 32 - bitsPerScanline;
-            padding = (int)Math.Ceiling(padding / 8.0);
-        }
-
-        var imSize = (_width + padding) * _height;
-
-        // Read till we have the whole image
-        var values = new byte[imSize];
-        var bytesRead = 0;
         while (bytesRead < imSize)
         {
             bytesRead += _inputStream.Read(values, bytesRead, imSize - bytesRead);
@@ -1249,49 +1228,93 @@ public class BmpImage
             // one scanline from the bottom to the top at a time.
             for (var i = 0; i < _height; i++)
             {
-                Array.Copy(values,
-                           imSize - (i + 1) * (_width + padding),
-                           bdata,
-                           i * _width,
-                           _width);
+                Array.Copy(values, imSize - (i + 1) * (bytesPerScanline + padding), bdata, i * bytesPerScanline,
+                    bytesPerScanline);
             }
         }
         else
         {
             for (var i = 0; i < _height; i++)
             {
-                Array.Copy(values,
-                           i * (_width + padding),
-                           bdata,
-                           i * _width,
-                           _width);
+                Array.Copy(values, i * (bytesPerScanline + padding), bdata, i * bytesPerScanline, bytesPerScanline);
             }
         }
 
-        return indexedModel(bdata, 8, paletteEntries);
+        return indexedModel(bdata, bpc: 4, paletteEntries);
+    }
+
+    /// <summary>
+    ///     Method to read 8 bit BMP image data
+    /// </summary>
+    private Image read8Bit(int paletteEntries)
+    {
+        var bdata = new byte[_width * _height];
+
+        // Padding bytes at the end of each scanline
+        var padding = 0;
+
+        // width * bitsPerPixel should be divisible by 32
+        var bitsPerScanline = _width * 8;
+
+        if (bitsPerScanline % 32 != 0)
+        {
+            padding = (bitsPerScanline / 32 + 1) * 32 - bitsPerScanline;
+            padding = (int)Math.Ceiling(padding / 8.0);
+        }
+
+        var imSize = (_width + padding) * _height;
+
+        // Read till we have the whole image
+        var values = new byte[imSize];
+        var bytesRead = 0;
+
+        while (bytesRead < imSize)
+        {
+            bytesRead += _inputStream.Read(values, bytesRead, imSize - bytesRead);
+        }
+
+        if (_isBottomUp)
+        {
+            // Convert the bottom up image to a top down format by copying
+            // one scanline from the bottom to the top at a time.
+            for (var i = 0; i < _height; i++)
+            {
+                Array.Copy(values, imSize - (i + 1) * (_width + padding), bdata, i * _width, _width);
+            }
+        }
+        else
+        {
+            for (var i = 0; i < _height; i++)
+            {
+                Array.Copy(values, i * (_width + padding), bdata, i * _width, _width);
+            }
+        }
+
+        return indexedModel(bdata, bpc: 8, paletteEntries);
     }
 
     /// <summary>
     ///     Unsigned 4 bytes
     /// </summary>
-    private long readDWord(Stream stream) => readUnsignedInt(stream);
+    private static long readDWord(Stream stream) => readUnsignedInt(stream);
 
     /// <summary>
     ///     Signed 4 bytes
     /// </summary>
-    private int readInt(Stream stream)
+    private static int readInt(Stream stream)
     {
         var b1 = readUnsignedByte(stream);
         var b2 = readUnsignedByte(stream);
         var b3 = readUnsignedByte(stream);
         var b4 = readUnsignedByte(stream);
+
         return (b4 << 24) | (b3 << 16) | (b2 << 8) | b1;
     }
 
     /// <summary>
     ///     32 bit signed value
     /// </summary>
-    private int readLong(Stream stream) => readInt(stream);
+    private static int readLong(Stream stream) => readInt(stream);
 
     private void readPalette(int sizeOfPalette)
     {
@@ -1302,24 +1325,27 @@ public class BmpImage
 
         _palette = new byte[sizeOfPalette];
         var bytesRead = 0;
+
         while (bytesRead < sizeOfPalette)
         {
             var r = _inputStream.Read(_palette, bytesRead, sizeOfPalette - bytesRead);
+
             if (r <= 0)
             {
-                throw new IOException("incomplete palette");
+                throw new IOException(message: "incomplete palette");
             }
 
             bytesRead += r;
         }
 
-        Properties["palette"] = _palette;
+        Properties[key: "palette"] = _palette;
     }
 
     private Image readRle4()
     {
         // If imageSize field is not specified, calculate it.
         var imSize = (int)_imageSize;
+
         if (imSize == 0)
         {
             imSize = (int)(_bitmapFileSize - _bitmapOffset);
@@ -1328,14 +1354,14 @@ public class BmpImage
         // Read till we have the whole image
         var values = new byte[imSize];
         var bytesRead = 0;
+
         while (bytesRead < imSize)
         {
-            bytesRead += _inputStream.Read(values, bytesRead,
-                                           imSize - bytesRead);
+            bytesRead += _inputStream.Read(values, bytesRead, imSize - bytesRead);
         }
 
         // Decompress the RLE4 compressed data.
-        var val = decodeRle(false, values);
+        var val = decodeRle(is8: false, values);
 
         // Invert it as it is bottom up format.
         if (_isBottomUp)
@@ -1348,6 +1374,7 @@ public class BmpImage
             {
                 index = i * _width;
                 lineEnd = l + _width;
+
                 while (l != lineEnd)
                 {
                     val[l++] = inverted[index++];
@@ -1359,6 +1386,7 @@ public class BmpImage
         var bdata = new byte[stride * _height];
         var ptr = 0;
         var sh = 0;
+
         for (var h = 0; h < _height; ++h)
         {
             for (var w = 0; w < _width; ++w)
@@ -1376,13 +1404,14 @@ public class BmpImage
             sh += stride;
         }
 
-        return indexedModel(bdata, 4, 4);
+        return indexedModel(bdata, bpc: 4, paletteEntries: 4);
     }
 
     private Image readRle8()
     {
         // If imageSize field is not provided, calculate it.
         var imSize = (int)_imageSize;
+
         if (imSize == 0)
         {
             imSize = (int)(_bitmapFileSize - _bitmapOffset);
@@ -1391,14 +1420,14 @@ public class BmpImage
         // Read till we have the whole image
         var values = new byte[imSize];
         var bytesRead = 0;
+
         while (bytesRead < imSize)
         {
-            bytesRead += _inputStream.Read(values, bytesRead,
-                                           imSize - bytesRead);
+            bytesRead += _inputStream.Read(values, bytesRead, imSize - bytesRead);
         }
 
         // Since data is compressed, decompress it
-        var val = decodeRle(true, values);
+        var val = decodeRle(is8: true, values);
 
         // Uncompressed data does not have any padding
         imSize = _width * _height;
@@ -1410,18 +1439,16 @@ public class BmpImage
             // int bytesPerScanline = (int)Math.Ceil((double)width/8.0);
             var temp = new byte[val.Length];
             var bytesPerScanline = _width;
+
             for (var i = 0; i < _height; i++)
             {
-                Array.Copy(val,
-                           imSize - (i + 1) * bytesPerScanline,
-                           temp,
-                           i * bytesPerScanline, bytesPerScanline);
+                Array.Copy(val, imSize - (i + 1) * bytesPerScanline, temp, i * bytesPerScanline, bytesPerScanline);
             }
 
             val = temp;
         }
 
-        return indexedModel(val, 8, 4);
+        return indexedModel(val, bpc: 8, paletteEntries: 4);
     }
 
     /// <summary>
@@ -1430,43 +1457,46 @@ public class BmpImage
     /// <summary>
     ///     Signed 16 bits
     /// </summary>
-    private int readShort(Stream stream)
+    private static int readShort(Stream stream)
     {
         var b1 = readUnsignedByte(stream);
         var b2 = readUnsignedByte(stream);
+
         return (b2 << 8) | b1;
     }
 
     /// <summary>
     ///     Unsigned 8 bits
     /// </summary>
-    private int readUnsignedByte(Stream stream) => stream.ReadByte() & 0xff;
+    private static int readUnsignedByte(Stream stream) => stream.ReadByte() & 0xff;
 
     /// <summary>
     ///     Unsigned 4 bytes
     /// </summary>
-    private long readUnsignedInt(Stream stream)
+    private static long readUnsignedInt(Stream stream)
     {
         var b1 = readUnsignedByte(stream);
         var b2 = readUnsignedByte(stream);
         var b3 = readUnsignedByte(stream);
         var b4 = readUnsignedByte(stream);
         long l = (b4 << 24) | (b3 << 16) | (b2 << 8) | b1;
+
         return l & 0xffffffff;
     }
 
     /// <summary>
     ///     Unsigned 2 bytes
     /// </summary>
-    private int readUnsignedShort(Stream stream)
+    private static int readUnsignedShort(Stream stream)
     {
         var b1 = readUnsignedByte(stream);
         var b2 = readUnsignedByte(stream);
+
         return ((b2 << 8) | b1) & 0xffff;
     }
 
     /// <summary>
     ///     Unsigned 16 bits
     /// </summary>
-    private int readWord(Stream stream) => readUnsignedShort(stream);
+    private static int readWord(Stream stream) => readUnsignedShort(stream);
 }

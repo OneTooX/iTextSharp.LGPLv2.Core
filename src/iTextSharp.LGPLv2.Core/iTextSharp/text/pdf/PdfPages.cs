@@ -108,7 +108,7 @@ public class PdfPages
     {
         if (_parents.Count > 1)
         {
-            throw new Exception("Linear page mode can only be called with a single parent.");
+            throw new InvalidOperationException("Linear page mode can only be called with a single parent.");
         }
 
         if (topParent != null)
@@ -180,6 +180,9 @@ public class PdfPages
                 }
                 else
                 {
+                    // OneTooX: the iText version is deliberately not stamped into produced
+                    // documents. Keep this commented rather than deleted so an upstream merge
+                    // conflicts here instead of silently reinstating it.
                     //top.Put(PdfName.Itxt, new PdfString(Document.Release));
                 }
 

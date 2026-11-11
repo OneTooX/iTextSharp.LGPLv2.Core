@@ -33,10 +33,10 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
 
     public HyphenationTree()
     {
-        Stoplist = new NullValueDictionary<string, List<object>>(23); // usually a small table
+        Stoplist = new NullValueDictionary<string, List<object>>(capacity: 23); // usually a small table
         Classmap = new TernaryTree();
         Vspace = new ByteVector();
-        Vspace.Alloc(1); // this reserves index 0, which we don't use
+        Vspace.Alloc(size: 1); // this reserves index 0, which we don't use
     }
 
     /// <summary>
@@ -53,15 +53,21 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// </summary>
     public void AddClass(string chargroup)
     {
+        if (chargroup == null)
+        {
+            throw new ArgumentNullException(nameof(chargroup));
+        }
+
         if (chargroup.Length > 0)
         {
-            var equivChar = chargroup[0];
+            var equivChar = chargroup[index: 0];
             var key = new char[2];
             key[1] = (char)0;
+
             for (var i = 0; i < chargroup.Length; i++)
             {
                 key[0] = chargroup[i];
-                Classmap.Insert(key, 0, equivChar);
+                Classmap.Insert(key, start: 0, equivChar);
             }
         }
     }
@@ -75,14 +81,15 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     ///     (i.e. '0' to '9').
     /// </summary>
     /// <param name="pattern">the hyphenation pattern</param>
-    /// <param name="ivalue">interletter weight values indicating the</param>
-    public void AddPattern(string pattern, string ivalue)
+    /// <param name="values">interletter weight values indicating the</param>
+    public void AddPattern(string pattern, string values)
     {
-        var k = _ivalues.Find(ivalue);
+        var k = _ivalues.Find(values);
+
         if (k <= 0)
         {
-            k = PackValues(ivalue);
-            _ivalues.Insert(ivalue, (char)k);
+            k = PackValues(values);
+            _ivalues.Insert(values, (char)k);
         }
 
         Insert(pattern, (char)k);
@@ -96,10 +103,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// </summary>
     /// <param name="word">normalized word</param>
     /// <param name="hyphenatedword">a vector of alternating strings and</param>
-    public void AddException(string word, List<object> hyphenatedword)
-    {
-        Stoplist[word] = hyphenatedword;
-    }
+    public void AddException(string word, List<object> hyphenatedword) => Stoplist[word] = hyphenatedword;
 
     /// <summary>
     ///     Packs the values by storing them in 4 bits, two values into a byte
@@ -112,14 +116,21 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// <returns>the index into the vspace array where the packed values</returns>
     protected int PackValues(string values)
     {
+        if (values == null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
         int i, n = values.Length;
         var m = (n & 1) == 1 ? (n >> 1) + 2 : (n >> 1) + 1;
         var offset = Vspace.Alloc(m);
         var va = Vspace.Arr;
+
         for (i = 0; i < n; i++)
         {
             var j = i >> 1;
             var v = (byte)((values[i] - '0' + 1) & 0x0f);
+
             if ((i & 1) == 1)
             {
                 va[j + offset] = (byte)(va[j + offset] | v);
@@ -131,6 +142,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         }
 
         va[m - 1 + offset] = 0; // terminator
+
         return offset;
     }
 
@@ -138,11 +150,13 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     {
         var buf = new StringBuilder();
         var v = Vspace[k++];
+
         while (v != 0)
         {
             var c = (char)((v >> 4) - 1 + '0');
             buf.Append(c);
             c = (char)(v & 0x0f);
+
             if (c == 0)
             {
                 break;
@@ -173,10 +187,10 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         _ivalues = null;
     }
 
-
     public string FindPattern(string pat)
     {
         var k = Find(pat);
+
         if (k >= 0)
         {
             return UnpackValues(k);
@@ -189,8 +203,18 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     ///     String compare, returns 0 if equal or
     ///     t is a substring of s
     /// </summary>
-    protected int Hstrcmp(char[] s, int si, char[] t, int ti)
+    protected static int Hstrcmp(char[] s, int si, char[] t, int ti)
     {
+        if (s == null)
+        {
+            throw new ArgumentNullException(nameof(s));
+        }
+
+        if (t == null)
+        {
+            throw new ArgumentNullException(nameof(t));
+        }
+
         for (; s[si] == t[ti]; si++, ti++)
         {
             if (s[si] == 0)
@@ -211,11 +235,13 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     {
         var buf = new StringBuilder();
         var v = Vspace[k++];
+
         while (v != 0)
         {
             var c = (char)((v >> 4) - 1);
             buf.Append(c);
             c = (char)(v & 0x0f);
+
             if (c == 0)
             {
                 break;
@@ -227,6 +253,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         }
 
         var res = new byte[buf.Length];
+
         for (var i = 0; i < res.Length; i++)
         {
             res[i] = (byte)buf[i];
@@ -254,6 +281,16 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// <param name="il">interletter values array to update</param>
     protected void SearchPatterns(char[] word, int index, byte[] il)
     {
+        if (word == null)
+        {
+            throw new ArgumentNullException(nameof(word));
+        }
+
+        if (il == null)
+        {
+            throw new ArgumentNullException(nameof(il));
+        }
+
         byte[] values;
         var i = index;
         char p, q;
@@ -268,6 +305,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
                 {
                     values = GetValues(Eq[p]); // data pointer is in eq[]
                     var j = index;
+
                     for (var k = 0; k < values.Length; k++)
                     {
                         if (j < il.Length && values[k] > il[j])
@@ -283,6 +321,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
             }
 
             var d = sp - Sc[p];
+
             if (d == 0)
             {
                 if (sp == 0)
@@ -308,6 +347,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
                     {
                         values = GetValues(Eq[q]);
                         var j = index;
+
                         for (var k = 0; k < values.Length; k++)
                         {
                             if (j < il.Length && values[k] > il[j])
@@ -324,10 +364,10 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
                     q = Lo[q];
 
                     /*
-                        * actually the code should be:
-                        * q = sc[q] < 0 ? hi[q] : lo[q];
-                        * but java chars are unsigned
-                        */
+                     * actually the code should be:
+                     * q = sc[q] < 0 ? hi[q] : lo[q];
+                     * but java chars are unsigned
+                     */
                 }
             }
             else
@@ -347,11 +387,16 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// <param name="remainCharCount">Minimum number of characters allowed</param>
     /// <param name="pushCharCount">Minimum number of characters allowed after</param>
     /// <returns>a {@link Hyphenation Hyphenation} object representing</returns>
-    public Hyphenation Hyphenate(string word, int remainCharCount,
-                                 int pushCharCount)
+    public Hyphenation Hyphenate(string word, int remainCharCount, int pushCharCount)
     {
+        if (word == null)
+        {
+            throw new ArgumentNullException(nameof(word));
+        }
+
         var w = word.ToCharArray();
-        return Hyphenate(w, 0, w.Length, remainCharCount, pushCharCount);
+
+        return Hyphenate(w, offset: 0, w.Length, remainCharCount, pushCharCount);
     }
 
     /// <summary>
@@ -388,9 +433,13 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
     /// <param name="remainCharCount">Minimum number of characters allowed</param>
     /// <param name="pushCharCount">Minimum number of characters allowed after</param>
     /// <returns>a {@link Hyphenation Hyphenation} object representing</returns>
-    public Hyphenation Hyphenate(char[] w, int offset, int len,
-                                 int remainCharCount, int pushCharCount)
+    public Hyphenation Hyphenate(char[] w, int offset, int len, int remainCharCount, int pushCharCount)
     {
+        if (w == null)
+        {
+            throw new ArgumentNullException(nameof(w));
+        }
+
         int i;
         var word = new char[len + 3];
 
@@ -399,10 +448,12 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         var iIgnoreAtBeginning = 0;
         var iLength = len;
         var bEndOfLetters = false;
+
         for (i = 1; i <= len; i++)
         {
             c[0] = w[offset + i - 1];
-            var nc = Classmap.Find(c, 0);
+            var nc = Classmap.Find(c, start: 0);
+
             if (nc < 0)
             {
                 // found a non-letter character ...
@@ -433,6 +484,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         }
 
         len = iLength;
+
         if (len < remainCharCount + pushCharCount)
         {
             // word is too short to be hyphenated
@@ -443,20 +495,23 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
         var k = 0;
 
         // check exception list first
-        var sw = new string(word, 1, len);
-        if (Stoplist.ContainsKey(sw))
+        var sw = new string(word, startIndex: 1, len);
+
+        if (Stoplist.TryGetValue(sw, out var hw))
         {
             // assume only simple hyphens (Hyphen.pre="-", Hyphen.post = Hyphen.no = null)
-            var hw = Stoplist[sw];
             var j = 0;
+
             for (i = 0; i < hw.Count; i++)
             {
                 var o = hw[i];
+
                 // j = Index(sw) = Letterindex(word)?
                 // result[k] = corresponding Index(w)
-                if (o is string)
+                if (o is string s)
                 {
-                    j += ((string)o).Length;
+                    j += s.Length;
+
                     if (j >= remainCharCount && j < len - pushCharCount)
                     {
                         result[k++] = j + iIgnoreAtBeginning;
@@ -471,6 +526,7 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
             word[len + 1] = '.'; // word end marker
             word[len + 2] = (char)0; // null terminated
             var il = new byte[len + 3]; // initialized to zero
+
             for (i = 0; i < len + 1; i++)
             {
                 SearchPatterns(word, i, il);
@@ -482,29 +538,22 @@ public class HyphenationTree : TernaryTree, IPatternConsumer
             // result[k] = corresponding Index(w)
             for (i = 0; i < len; i++)
             {
-                if ((il[i + 1] & 1) == 1 && i >= remainCharCount
-                                         && i <= len - pushCharCount)
+                if ((il[i + 1] & 1) == 1 && i >= remainCharCount && i <= len - pushCharCount)
                 {
                     result[k++] = i + iIgnoreAtBeginning;
                 }
             }
         }
 
-
         if (k > 0)
         {
             // trim result array
             var res = new int[k];
-            Array.Copy(result, 0, res, 0, k);
+            Array.Copy(result, sourceIndex: 0, res, destinationIndex: 0, k);
+
             return new Hyphenation(new string(w, offset, len), res);
         }
 
         return null;
-    }
-
-    public override void PrintStats()
-    {
-        Console.WriteLine("Value space size = " + Vspace.Length);
-        base.PrintStats();
     }
 }

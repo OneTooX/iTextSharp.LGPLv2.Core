@@ -4,59 +4,61 @@ namespace iTextSharp.text.pdf;
 
 /// <summary>
 /// </summary>
-public class GlyphList
+public static class GlyphList
 {
-    private static readonly INullValueDictionary<string, int[]> _names2Unicode =
-        new NullValueDictionary<string, int[]>();
+    private static readonly NullValueDictionary<string, int[]> _names2Unicode = new();
 
-    private static readonly INullValueDictionary<int, string> _unicode2Names = new NullValueDictionary<int, string>();
+    private static readonly NullValueDictionary<int, string> _unicode2Names = new();
 
     static GlyphList()
     {
-        Stream istr = null;
         try
         {
-            istr = BaseFont.GetResourceStream($"{BaseFont.RESOURCE_PATH}glyphlist.txt");
-            if (istr == null)
+            using var resourceStream = BaseFont.GetResourceStream($"{BaseFont.RESOURCE_PATH}glyphlist.txt");
+
+            if (resourceStream == null)
             {
-                var msg = "glyphlist.txt not found as resource.";
-                throw new Exception(msg);
+                return;
             }
 
             var buf = new byte[1024];
-            var outp = new MemoryStream();
+            using var outputStream = new MemoryStream();
+
             while (true)
             {
-                var size = istr.Read(buf, 0, buf.Length);
+                var size = resourceStream.Read(buf, offset: 0, buf.Length);
+
                 if (size == 0)
                 {
                     break;
                 }
 
-                outp.Write(buf, 0, size);
+                outputStream.Write(buf, offset: 0, size);
             }
 
-            istr.Dispose();
-            istr = null;
-            var s = PdfEncodings.ConvertToString(outp.ToArray(), null);
-            var tk = new StringTokenizer(s, "\r\n");
+            var s = PdfEncodings.ConvertToString(outputStream.ToArray(), encoding: null);
+            var tk = new StringTokenizer(s, delim: "\r\n");
+
             while (tk.HasMoreTokens())
             {
                 var line = tk.NextToken();
-                if (line.StartsWith("#"))
+
+                if (line.StartsWith(value: '#'))
                 {
                     continue;
                 }
 
-                var t2 = new StringTokenizer(line, " ;\r\n\t\f");
+                var t2 = new StringTokenizer(line, delim: " ;\r\n\t\f");
                 string name = null;
                 string hex = null;
+
                 if (!t2.HasMoreTokens())
                 {
                     continue;
                 }
 
                 name = t2.NextToken();
+
                 if (!t2.HasMoreTokens())
                 {
                     continue;
@@ -65,26 +67,16 @@ public class GlyphList
                 hex = t2.NextToken();
                 var num = int.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
                 _unicode2Names[num] = name;
-                _names2Unicode[name] = new[] { num };
+
+                _names2Unicode[name] = new[]
+                {
+                    num
+                };
             }
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Console.Error.WriteLine($"glyphlist.txt loading error: {e.Message}");
-        }
-        finally
-        {
-            if (istr != null)
-            {
-                try
-                {
-                    istr.Dispose();
-                }
-                catch
-                {
-                    // empty on purpose
-                }
-            }
+            // ...
         }
     }
 

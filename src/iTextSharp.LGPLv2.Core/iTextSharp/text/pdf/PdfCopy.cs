@@ -1,4 +1,4 @@
-using System.util;
+﻿using System.util;
 
 namespace iTextSharp.text.pdf;
 
@@ -14,6 +14,8 @@ public class PdfCopy : PdfWriter
     /// </summary>
     private bool _rotateContents = true;
 
+    private readonly PdfStructureTreeMerger _structure;
+
     protected PdfIndirectReference acroForm;
 
     protected int CurrentObjectNum = 1;
@@ -25,7 +27,10 @@ public class PdfCopy : PdfWriter
 
     protected INullValueDictionary<RefKey, IndirectReferences> Indirects;
 
-    protected int[] NamePtr = { 0 };
+    protected int[] NamePtr =
+    {
+        0
+    };
 
     protected PdfReader Reader;
 
@@ -36,9 +41,15 @@ public class PdfCopy : PdfWriter
     /// <param name="os">outputstream</param>
     public PdfCopy(Document document, Stream os) : base(new PdfDocument(), os)
     {
+        if (document == null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
+
         document.AddDocListener(Pdf);
         Pdf.AddWriter(this);
         IndirectMap = new NullValueDictionary<PdfReader, INullValueDictionary<RefKey, IndirectReferences>>();
+        _structure = new PdfStructureTreeMerger(this);
     }
 
     /// <summary>
@@ -76,6 +87,7 @@ public class PdfCopy : PdfWriter
         var key = new RefKey(origRef);
         PdfIndirectReference pageRef;
         var iRef = Indirects[key];
+
         if (iRef != null && !iRef.Copied)
         {
             PageReferences.Add(iRef.Ref);
@@ -83,6 +95,7 @@ public class PdfCopy : PdfWriter
         }
 
         pageRef = CurrentPage;
+
         if (iRef == null)
         {
             iRef = new IndirectReferences(pageRef);
@@ -90,9 +103,45 @@ public class PdfCopy : PdfWriter
         }
 
         iRef.SetCopied();
+
+        // The annotations need the key they will have in the assembled document before the copy reads
+        // them: what it carries across is written where it can no longer be reached.
+        _structure.PrepareAnnotations(Reader, thePage);
         var newPage = CopyDictionary(thePage);
+        _structure.NoteCopiedAnnotations(Reader, this);
+
+        // The /StructParents that came across is the source document's key and means nothing here.
+        // The merger hands out the key this page has in the assembled document, or null when the
+        // source carried no structure to key.
+        var structParents = _structure.Track(Reader, origRef, pageRef);
+
+        if (structParents == null)
+        {
+            newPage.Remove(PdfName.Structparents);
+        }
+        else
+        {
+            newPage.Put(PdfName.Structparents, structParents);
+        }
+
         Root.AddPage(newPage);
         ++currentPageNumber;
+    }
+
+    /// <summary>
+    ///     The reference a source object was copied to, or null when this copy has not seen it. The
+    ///     structure merger needs it to name an annotation the assembled document holds a copy of.
+    /// </summary>
+    internal PdfIndirectReference CopiedReference(PdfReader reader, PrIndirectReference source)
+    {
+        if (reader == null || source == null)
+        {
+            return null;
+        }
+
+        var indirects = IndirectMap[reader];
+
+        return indirects?[new RefKey(source)]?.Ref;
     }
 
     /// <summary>
@@ -118,6 +167,7 @@ public class PdfCopy : PdfWriter
             var ri = CurrentPdfReaderInstance;
             Pdf.Close();
             base.Close();
+
             if (ri != null)
             {
                 try
@@ -141,11 +191,17 @@ public class PdfCopy : PdfWriter
     /// <param name="reader">The reader of the input file that is being copied</param>
     public void CopyAcroForm(PdfReader reader)
     {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         SetFromReader(reader);
 
         var catalog = reader.Catalog;
         PrIndirectReference hisRef = null;
         var o = catalog.Get(PdfName.Acroform);
+
         if (o != null && o.Type == PdfObject.INDIRECT)
         {
             hisRef = (PrIndirectReference)o;
@@ -159,6 +215,7 @@ public class PdfCopy : PdfWriter
         var key = new RefKey(hisRef);
         PdfIndirectReference myRef;
         var iRef = Indirects[key];
+
         if (iRef != null)
         {
             acroForm = myRef = iRef.Ref;
@@ -201,15 +258,22 @@ public class PdfCopy : PdfWriter
     /// <returns>the  PageStamp </returns>
     public PageStamp CreatePageStamp(PdfImportedPage iPage)
     {
+        if (iPage == null)
+        {
+            throw new ArgumentNullException(nameof(iPage));
+        }
+
         var pageNum = iPage.PageNumber;
         var reader = iPage.PdfReaderInstance.Reader;
         var pageN = reader.GetPageN(pageNum);
+
         return new PageStamp(reader, pageN, this);
     }
 
     public override void FreeReader(PdfReader reader)
     {
         IndirectMap.Remove(reader);
+
         if (CurrentPdfReaderInstance != null)
         {
             if (CurrentPdfReaderInstance.Reader == reader)
@@ -237,6 +301,11 @@ public class PdfCopy : PdfWriter
     /// <returns>the page</returns>
     public override PdfImportedPage GetImportedPage(PdfReader reader, int pageNumber)
     {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         if (CurrentPdfReaderInstance != null)
         {
             if (CurrentPdfReaderInstance.Reader != reader)
@@ -270,7 +339,8 @@ public class PdfCopy : PdfWriter
     ///     the referencetable is composed and everything is written
     ///     to the outputstream embedded in a Trailer.
     /// </summary>
-    internal override PdfIndirectReference Add(PdfPage page, PdfContents contents) => null;
+    internal override PdfIndirectReference Add(PdfPage page, PdfContents contents)
+        => null;
 
     /// <summary>
     ///     Translate a PRArray to a PdfArray. Also translate all of the objects contained
@@ -278,6 +348,11 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected PdfArray CopyArray(PdfArray inp)
     {
+        if (inp == null)
+        {
+            throw new ArgumentNullException(nameof(inp));
+        }
+
         var outp = new PdfArray();
 
         foreach (var value in inp.ArrayList)
@@ -294,12 +369,18 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected PdfDictionary CopyDictionary(PdfDictionary inp)
     {
+        if (inp == null)
+        {
+            throw new ArgumentNullException(nameof(inp));
+        }
+
         var outp = new PdfDictionary();
         var type = PdfReader.GetPdfObjectRelease(inp.Get(PdfName.TYPE));
 
         foreach (var key in inp.Keys)
         {
             var value = inp.Get(key);
+
             if (type != null && PdfName.Page.Equals(type))
             {
                 if (!key.Equals(PdfName.B) && !key.Equals(PdfName.Parent))
@@ -327,12 +408,19 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected virtual PdfIndirectReference CopyIndirect(PrIndirectReference inp)
     {
+        if (inp == null)
+        {
+            throw new ArgumentNullException(nameof(inp));
+        }
+
         PdfIndirectReference theRef;
         var key = new RefKey(inp);
         var iRef = Indirects[key];
+
         if (iRef != null)
         {
             theRef = iRef.Ref;
+
             if (iRef.Copied)
             {
                 return theRef;
@@ -346,9 +434,11 @@ public class PdfCopy : PdfWriter
         }
 
         var obj = PdfReader.GetPdfObjectRelease(inp);
+
         if (obj != null && obj.IsDictionary())
         {
             var type = PdfReader.GetPdfObjectRelease(((PdfDictionary)obj).Get(PdfName.TYPE));
+
             if (type != null && PdfName.Page.Equals(type))
             {
                 return theRef;
@@ -358,6 +448,7 @@ public class PdfCopy : PdfWriter
         iRef.SetCopied();
         obj = CopyObject(obj);
         AddToBody(obj, theRef);
+
         return theRef;
     }
 
@@ -376,7 +467,9 @@ public class PdfCopy : PdfWriter
             case PdfObject.DICTIONARY:
                 return CopyDictionary((PdfDictionary)inp);
             case PdfObject.INDIRECT:
-                return CopyIndirect((PrIndirectReference)inp);
+                PdfObject obj = CopyIndirect((PrIndirectReference)inp);
+
+                return obj ?? PdfNull.Pdfnull;
             case PdfObject.ARRAY:
                 return CopyArray((PdfArray)inp);
             case PdfObject.NUMBER:
@@ -388,12 +481,14 @@ public class PdfCopy : PdfWriter
                 return inp;
             case PdfObject.STREAM:
                 return CopyStream((PrStream)inp);
+
             //                return in;
             default:
                 if (inp.Type < 0)
                 {
                     var lit = ((PdfLiteral)inp).ToString();
-                    if (lit.Equals("true") || lit.Equals("false"))
+
+                    if (lit.Equals("true", StringComparison.Ordinal) || lit.Equals("false", StringComparison.Ordinal))
                     {
                         return new PdfBoolean(lit);
                     }
@@ -410,6 +505,11 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected PdfStream CopyStream(PrStream inp)
     {
+        if (inp == null)
+        {
+            throw new ArgumentNullException(nameof(inp));
+        }
+
         var outp = new PrStream(inp, null);
 
         foreach (var key in inp.Keys)
@@ -428,6 +528,7 @@ public class PdfCopy : PdfWriter
     protected override PdfDictionary GetCatalog(PdfIndirectReference rootObj)
     {
         PdfDictionary theCat = Pdf.GetCatalog(rootObj);
+
         if (FieldArray == null)
         {
             if (acroForm != null)
@@ -440,6 +541,21 @@ public class PdfCopy : PdfWriter
             addFieldResources(theCat);
         }
 
+        // Late on purpose: the structure tree needs every page placed before it knows which elements
+        // are worth keeping and what /ParentTree looks like. The XMP packet is picked up here too,
+        // because PdfWriter writes it out just after asking for the catalog.
+        _structure.Build(theCat);
+
+        if (xmpMetadata == null)
+        {
+            xmpMetadata = _structure.XmpMetadata;
+        }
+
+        if (_structure.Title != null && Info.Get(PdfName.Title) == null)
+        {
+            Info.Put(PdfName.Title, _structure.Title);
+        }
+
         return theCat;
     }
 
@@ -448,10 +564,16 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected int SetFromIPage(PdfImportedPage iPage)
     {
+        if (iPage == null)
+        {
+            throw new ArgumentNullException(nameof(iPage));
+        }
+
         var pageNum = iPage.PageNumber;
         var inst = CurrentPdfReaderInstance = iPage.PdfReaderInstance;
         Reader = inst.Reader;
         SetFromReader(Reader);
+
         return pageNum;
     }
 
@@ -460,8 +582,9 @@ public class PdfCopy : PdfWriter
     /// </summary>
     protected void SetFromReader(PdfReader reader)
     {
-        Reader = reader;
+        Reader = reader ?? throw new ArgumentNullException(nameof(reader));
         Indirects = IndirectMap[reader];
+
         if (Indirects == null)
         {
             Indirects = new NullValueDictionary<RefKey, IndirectReferences>();
@@ -469,12 +592,14 @@ public class PdfCopy : PdfWriter
             var catalog = reader.Catalog;
             PrIndirectReference refi = null;
             var o = catalog.Get(PdfName.Acroform);
+
             if (o == null || o.Type != PdfObject.INDIRECT)
             {
                 return;
             }
 
             refi = (PrIndirectReference)o;
+
             if (acroForm == null)
             {
                 acroForm = Body.PdfIndirectReference;
@@ -495,6 +620,7 @@ public class PdfCopy : PdfWriter
         catalog.Put(PdfName.Acroform, localAcroForm);
         localAcroForm.Put(PdfName.Fields, FieldArray);
         localAcroForm.Put(PdfName.Da, new PdfString("/Helv 0 Tf 0 g "));
+
         if (FieldTemplates.Count == 0)
         {
             return;
@@ -502,12 +628,14 @@ public class PdfCopy : PdfWriter
 
         var dr = new PdfDictionary();
         localAcroForm.Put(PdfName.Dr, dr);
+
         foreach (var template in FieldTemplates.Keys)
         {
             PdfFormField.MergeResources(dr, (PdfDictionary)template.Resources);
         }
 
         var fonts = dr.GetAsDict(PdfName.Font);
+
         if (fonts == null)
         {
             fonts = new PdfDictionary();
@@ -552,16 +680,24 @@ public class PdfCopy : PdfWriter
 
         public void AddAnnotation(PdfAnnotation annot)
         {
+            if (annot == null)
+            {
+                throw new ArgumentNullException(nameof(annot));
+            }
+
             var allAnnots = new List<PdfAnnotation>();
+
             if (annot.IsForm())
             {
                 var field = (PdfFormField)annot;
+
                 if (field.Parent != null)
                 {
                     return;
                 }
 
                 expandFields(field, allAnnots);
+
                 if (_cstp.FieldTemplates == null)
                 {
                     _cstp.FieldTemplates = new NullValueDictionary<PdfTemplate, object>();
@@ -575,11 +711,13 @@ public class PdfCopy : PdfWriter
             for (var k = 0; k < allAnnots.Count; ++k)
             {
                 annot = allAnnots[k];
+
                 if (annot.IsForm())
                 {
                     if (!annot.IsUsed())
                     {
                         var templates = annot.Templates;
+
                         if (templates != null)
                         {
                             foreach (var tpl in templates.Keys)
@@ -590,6 +728,7 @@ public class PdfCopy : PdfWriter
                     }
 
                     var field = (PdfFormField)annot;
+
                     if (field.Parent == null)
                     {
                         addDocumentField(field.IndirectReference);
@@ -600,6 +739,7 @@ public class PdfCopy : PdfWriter
                 {
                     var pdfobj = PdfReader.GetPdfObject(_pageN.Get(PdfName.Annots), _pageN);
                     PdfArray annots = null;
+
                     if (pdfobj == null || !pdfobj.IsArray())
                     {
                         annots = new PdfArray();
@@ -611,36 +751,36 @@ public class PdfCopy : PdfWriter
                     }
 
                     annots.Add(annot.IndirectReference);
+
                     if (!annot.IsUsed())
                     {
                         var rect = (PdfRectangle)annot.Get(PdfName.Rect);
+
                         if (rect != null && (rect.Left.ApproxNotEqual(0) || rect.Right.ApproxNotEqual(0) ||
                                              rect.Top.ApproxNotEqual(0) || rect.Bottom.ApproxNotEqual(0)))
                         {
-                            var rotation = _reader.GetPageRotation(_pageN);
-                            var pageSize = _reader.GetPageSizeWithRotation(_pageN);
+                            var rotation = PdfReader.GetPageRotation(_pageN);
+                            var pageSize = PdfReader.GetPageSizeWithRotation(_pageN);
+
                             switch (rotation)
                             {
                                 case 90:
-                                    annot.Put(PdfName.Rect, new PdfRectangle(
-                                                                             pageSize.Top - rect.Bottom,
-                                                                             rect.Left,
-                                                                             pageSize.Top - rect.Top,
-                                                                             rect.Right));
+                                    annot.Put(PdfName.Rect,
+                                        new PdfRectangle(pageSize.Top - rect.Bottom, rect.Left, pageSize.Top - rect.Top,
+                                            rect.Right));
+
                                     break;
                                 case 180:
-                                    annot.Put(PdfName.Rect, new PdfRectangle(
-                                                                             pageSize.Right - rect.Left,
-                                                                             pageSize.Top - rect.Bottom,
-                                                                             pageSize.Right - rect.Right,
-                                                                             pageSize.Top - rect.Top));
+                                    annot.Put(PdfName.Rect,
+                                        new PdfRectangle(pageSize.Right - rect.Left, pageSize.Top - rect.Bottom,
+                                            pageSize.Right - rect.Right, pageSize.Top - rect.Top));
+
                                     break;
                                 case 270:
-                                    annot.Put(PdfName.Rect, new PdfRectangle(
-                                                                             rect.Bottom,
-                                                                             pageSize.Right - rect.Left,
-                                                                             rect.Top,
-                                                                             pageSize.Right - rect.Right));
+                                    annot.Put(PdfName.Rect,
+                                        new PdfRectangle(rect.Bottom, pageSize.Right - rect.Left, rect.Top,
+                                            pageSize.Right - rect.Right));
+
                                     break;
                             }
                         }
@@ -664,6 +804,7 @@ public class PdfCopy : PdfWriter
 
             PdfArray ar = null;
             var content = PdfReader.GetPdfObject(_pageN.Get(PdfName.Contents), _pageN);
+
             if (content == null)
             {
                 ar = new PdfArray();
@@ -686,6 +827,7 @@ public class PdfCopy : PdfWriter
             }
 
             var outP = new ByteBuffer();
+
             if (_under != null)
             {
                 outP.Append(PdfContents.Savestate);
@@ -704,6 +846,7 @@ public class PdfCopy : PdfWriter
             var ref1 = _cstp.AddToBody(stream).IndirectReference;
             ar.AddFirst(ref1);
             outP.Reset();
+
             if (_over != null)
             {
                 outP.Append(' ');
@@ -771,14 +914,16 @@ public class PdfCopy : PdfWriter
                 return;
             }
 
-            var page = _reader.GetPageSizeWithRotation(pageN);
+            var page = PdfReader.GetPageSizeWithRotation(pageN);
             var rotation = page.Rotation;
+
             switch (rotation)
             {
                 case 90:
                     outP.Append(PdfContents.Rotate90);
                     outP.Append(page.Top);
                     outP.Append(' ').Append('0').Append(PdfContents.Rotatefinal);
+
                     break;
                 case 180:
                     outP.Append(PdfContents.Rotate180);
@@ -786,20 +931,23 @@ public class PdfCopy : PdfWriter
                     outP.Append(' ');
                     outP.Append(page.Top);
                     outP.Append(PdfContents.Rotatefinal);
+
                     break;
                 case 270:
                     outP.Append(PdfContents.Rotate270);
                     outP.Append('0').Append(' ');
                     outP.Append(page.Right);
                     outP.Append(PdfContents.Rotatefinal);
+
                     break;
             }
         }
 
-        private void expandFields(PdfFormField field, IList<PdfAnnotation> allAnnots)
+        private static void expandFields(PdfFormField field, IList<PdfAnnotation> allAnnots)
         {
             allAnnots.Add(field);
             var kids = field.Kids;
+
             if (kids != null)
             {
                 for (var k = 0; k < kids.Count; ++k)
@@ -817,8 +965,8 @@ public class PdfCopy : PdfWriter
         /// <summary>
         ///     Creates a new instance of StampContent
         /// </summary>
-        internal StampContent(PdfWriter writer, PageResources pageResources) : base(writer) =>
-            _pageResources = pageResources;
+        internal StampContent(PdfWriter writer, PageResources pageResources) : base(writer)
+            => _pageResources = pageResources;
 
         /// <summary>
         ///     Gets a duplicate of this  PdfContentByte . All
@@ -847,9 +995,7 @@ public class PdfCopy : PdfWriter
         public PdfIndirectReference Ref { get; }
 
         public void SetCopied()
-        {
-            Copied = true;
-        }
+            => Copied = true;
     }
 
     /// <summary>
@@ -878,19 +1024,20 @@ public class PdfCopy : PdfWriter
             Gen = refi.Generation;
         }
 
-        public override bool Equals(object o)
+        public override bool Equals(object obj)
         {
-            if (!(o is RefKey))
+            if (obj is not RefKey other)
             {
                 return false;
             }
 
-            var other = (RefKey)o;
-            return Gen == other.Gen && Num == other.Num;
+            return Num == other.Num && Gen == other.Gen;
         }
 
-        public override int GetHashCode() => (Gen << 16) + Num;
+        public override int GetHashCode()
+            => (Gen << 16) + Num;
 
-        public override string ToString() => $"{Num} {Gen}";
+        public override string ToString()
+            => $"{Num} {Gen}";
     }
 }

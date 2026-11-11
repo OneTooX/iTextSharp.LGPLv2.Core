@@ -106,16 +106,16 @@ public class PdfPTable : ILargeElement
     {
         if (relativeWidths == null)
         {
-            throw new ArgumentNullException("The widths array in PdfPTable constructor can not be null.");
+            throw new ArgumentNullException(nameof(relativeWidths));
         }
 
         if (relativeWidths.Length == 0)
         {
-            throw new ArgumentException("The widths array in PdfPTable constructor can not have zero length.");
+            throw new ArgumentException(message: "The widths array in PdfPTable constructor can not have zero length.");
         }
 
         RelativeWidths = new float[relativeWidths.Length];
-        Array.Copy(relativeWidths, 0, RelativeWidths, 0, relativeWidths.Length);
+        Array.Copy(relativeWidths, sourceIndex: 0, RelativeWidths, destinationIndex: 0, relativeWidths.Length);
         absoluteWidths = new float[relativeWidths.Length];
         CalculateWidths();
         CurrentRow = new PdfPCell[absoluteWidths.Length];
@@ -130,10 +130,12 @@ public class PdfPTable : ILargeElement
     {
         if (numColumns <= 0)
         {
-            throw new ArgumentException("The number of columns in PdfPTable constructor must be greater than zero.");
+            throw new ArgumentException(
+                message: "The number of columns in PdfPTable constructor must be greater than zero.");
         }
 
         RelativeWidths = new float[numColumns];
+
         for (var k = 0; k < numColumns; ++k)
         {
             RelativeWidths[k] = 1;
@@ -151,7 +153,13 @@ public class PdfPTable : ILargeElement
     /// <param name="table">the  PdfPTable  to be copied</param>
     public PdfPTable(PdfPTable table)
     {
+        if (table == null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
         CopyFormat(table);
+
         for (var k = 0; k < CurrentRow.Length; ++k)
         {
             if (table.CurrentRow[k] == null)
@@ -165,6 +173,7 @@ public class PdfPTable : ILargeElement
         for (var k = 0; k < table.rows.Count; ++k)
         {
             var row = table.rows[k];
+
             if (row != null)
             {
                 row = new PdfPRow(row);
@@ -208,11 +217,13 @@ public class PdfPTable : ILargeElement
         get
         {
             float total = 0;
-            var start = Math.Max(0, headerRows - _footerRows);
+            var start = Math.Max(val1: 0, headerRows - _footerRows);
             var size = Math.Min(rows.Count, headerRows);
+
             for (var k = start; k < size; ++k)
             {
                 var row = rows[k];
+
                 if (row != null)
                 {
                     total += row.MaxHeights;
@@ -229,6 +240,7 @@ public class PdfPTable : ILargeElement
         set
         {
             _footerRows = value;
+
             if (_footerRows < 0)
             {
                 _footerRows = 0;
@@ -247,9 +259,11 @@ public class PdfPTable : ILargeElement
         {
             float total = 0;
             var size = Math.Min(rows.Count, headerRows);
+
             for (var k = 0; k < size; ++k)
             {
                 var row = rows[k];
+
                 if (row != null)
                 {
                     total += row.MaxHeights;
@@ -266,6 +280,7 @@ public class PdfPTable : ILargeElement
         set
         {
             headerRows = value;
+
             if (headerRows < 0)
             {
                 headerRows = 0;
@@ -328,6 +343,7 @@ public class PdfPTable : ILargeElement
                 case PdfWriter.RUN_DIRECTION_LTR:
                 case PdfWriter.RUN_DIRECTION_RTL:
                     runDirection = value;
+
                     break;
                 default:
                     throw new ArgumentException("Invalid run direction: " + runDirection);
@@ -393,9 +409,9 @@ public class PdfPTable : ILargeElement
             {
                 tableEvent = value;
             }
-            else if (tableEvent is PdfPTableEventForwarder)
+            else if (tableEvent is PdfPTableEventForwarder forwarder)
             {
-                ((PdfPTableEventForwarder)tableEvent).AddTableEvent(value);
+                forwarder.AddTableEvent(value);
             }
             else
             {
@@ -430,7 +446,7 @@ public class PdfPTable : ILargeElement
             totalWidth = value;
             totalHeight = 0;
             CalculateWidths();
-            CalculateHeights(true);
+            CalculateHeights(firsttime: true);
         }
     }
 
@@ -492,6 +508,11 @@ public class PdfPTable : ILargeElement
     /// <returns> true  if the element was processed successfully</returns>
     public bool Process(IElementListener listener)
     {
+        if (listener == null)
+        {
+            throw new ArgumentNullException(nameof(listener));
+        }
+
         try
         {
             return listener.Add(this);
@@ -519,13 +540,15 @@ public class PdfPTable : ILargeElement
     /// <returns>an array of 4  PdfContentByte </returns>
     public static PdfContentByte[] BeginWritingRows(PdfContentByte canvas)
     {
+        if (canvas == null)
+        {
+            throw new ArgumentNullException(nameof(canvas));
+        }
+
         return new[]
-               {
-                   canvas,
-                   canvas.Duplicate,
-                   canvas.Duplicate,
-                   canvas.Duplicate,
-               };
+        {
+            canvas, canvas.Duplicate, canvas.Duplicate, canvas.Duplicate
+        };
     }
 
     /// <summary>
@@ -534,12 +557,17 @@ public class PdfPTable : ILargeElement
     /// <param name="canvases">the array returned by  beginWritingRows() </param>
     public static void EndWritingRows(PdfContentByte[] canvases)
     {
+        if (canvases == null)
+        {
+            throw new ArgumentNullException(nameof(canvases));
+        }
+
         var canvas = canvases[BASECANVAS];
         canvas.SaveState();
         canvas.Add(canvases[BACKGROUNDCANVAS]);
         canvas.RestoreState();
         canvas.SaveState();
-        canvas.SetLineCap(2);
+        canvas.SetLineCap(value: 2);
         canvas.ResetRgbColorStroke();
         canvas.Add(canvases[LINECANVAS]);
         canvas.RestoreState();
@@ -555,6 +583,7 @@ public class PdfPTable : ILargeElement
     {
         var nt = new PdfPTable();
         nt.CopyFormat(table);
+
         return nt;
     }
 
@@ -568,7 +597,7 @@ public class PdfPTable : ILargeElement
         var ncell = new PdfPCell(cell);
 
         var colspan = ncell.Colspan;
-        colspan = Math.Max(colspan, 1);
+        colspan = Math.Max(colspan, val2: 1);
         colspan = Math.Min(colspan, CurrentRow.Length - CurrentRowIdx);
         ncell.Colspan = colspan;
 
@@ -578,6 +607,7 @@ public class PdfPTable : ILargeElement
         }
 
         var rdir = ncell.RunDirection;
+
         if (rdir == PdfWriter.RUN_DIRECTION_DEFAULT)
         {
             ncell.RunDirection = runDirection;
@@ -586,6 +616,7 @@ public class PdfPTable : ILargeElement
         skipColsWithRowspanAbove();
 
         var cellAdded = false;
+
         if (CurrentRowIdx < CurrentRow.Length)
         {
             CurrentRow[CurrentRowIdx] = ncell;
@@ -598,10 +629,12 @@ public class PdfPTable : ILargeElement
         if (CurrentRowIdx >= CurrentRow.Length)
         {
             var numCols = NumberOfColumns;
+
             if (runDirection == PdfWriter.RUN_DIRECTION_RTL)
             {
                 var rtlRow = new PdfPCell[numCols];
                 var rev = CurrentRow.Length;
+
                 for (var k = 0; k < CurrentRow.Length; ++k)
                 {
                     var rcell = CurrentRow[k];
@@ -615,6 +648,7 @@ public class PdfPTable : ILargeElement
             }
 
             var row = new PdfPRow(CurrentRow);
+
             if (totalWidth > 0)
             {
                 row.SetWidths(absoluteWidths);
@@ -624,6 +658,7 @@ public class PdfPTable : ILargeElement
             rows.Add(row);
             CurrentRow = new PdfPCell[numCols];
             CurrentRowIdx = 0;
+            skipColsWithRowspanAbove();
             RowCompleted = true;
         }
 
@@ -638,10 +673,7 @@ public class PdfPTable : ILargeElement
     ///     Adds a cell element.
     /// </summary>
     /// <param name="text">the text for the cell</param>
-    public void AddCell(string text)
-    {
-        AddCell(new Phrase(text));
-    }
+    public void AddCell(string text) => AddCell(new Phrase(text));
 
     /// <summary>
     ///     Adds a nested table.
@@ -694,6 +726,7 @@ public class PdfPTable : ILargeElement
         }
 
         totalHeight = 0;
+
         for (var k = 0; k < rows.Count; ++k)
         {
             totalHeight += GetRowHeight(k, firsttime);
@@ -705,10 +738,7 @@ public class PdfPTable : ILargeElement
     /// <summary>
     ///     Calculates the heights of the table.
     /// </summary>
-    public void CalculateHeightsFast()
-    {
-        CalculateHeights(false);
-    }
+    public void CalculateHeightsFast() => CalculateHeights(firsttime: false);
 
     /// <summary>
     ///     Completes the current row with the default cell. An incomplete row will be dropped
@@ -728,6 +758,7 @@ public class PdfPTable : ILargeElement
     public void DeleteBodyRows()
     {
         List<PdfPRow> rows2 = new();
+
         for (var k = 0; k < headerRows; ++k)
         {
             rows2.Add(rows[k]);
@@ -735,6 +766,7 @@ public class PdfPTable : ILargeElement
 
         rows = rows2;
         totalHeight = 0;
+
         if (totalWidth > 0)
         {
             totalHeight = HeaderHeight;
@@ -762,6 +794,7 @@ public class PdfPTable : ILargeElement
         if (totalWidth > 0)
         {
             var row = rows[rowNumber];
+
             if (row != null)
             {
                 totalHeight -= row.MaxHeights;
@@ -769,9 +802,11 @@ public class PdfPTable : ILargeElement
         }
 
         rows.RemoveAt(rowNumber);
+
         if (rowNumber < headerRows)
         {
             --headerRows;
+
             if (rowNumber >= headerRows - _footerRows)
             {
                 --_footerRows;
@@ -794,7 +829,7 @@ public class PdfPTable : ILargeElement
     /// </summary>
     /// <param name="idx">the row index (starts at 0)</param>
     /// <returns>the height of a particular row</returns>
-    public float GetRowHeight(int idx) => GetRowHeight(idx, false);
+    public float GetRowHeight(int idx) => GetRowHeight(idx, firsttime: false);
 
     /// <summary>
     ///     Gets the height of a particular row.
@@ -811,6 +846,7 @@ public class PdfPTable : ILargeElement
         }
 
         var row = rows[idx];
+
         if (row == null)
         {
             return 0;
@@ -824,6 +860,7 @@ public class PdfPTable : ILargeElement
         var height = row.MaxHeights;
         PdfPCell cell;
         PdfPRow tmprow;
+
         for (var i = 0; i < RelativeWidths.Length; i++)
         {
             if (!RowSpanAbove(idx, i))
@@ -832,6 +869,7 @@ public class PdfPTable : ILargeElement
             }
 
             var rs = 1;
+
             while (RowSpanAbove(idx - rs, i))
             {
                 rs++;
@@ -840,13 +878,26 @@ public class PdfPTable : ILargeElement
             tmprow = rows[idx - rs];
             cell = tmprow.GetCells()[i];
             float tmp = 0;
+
             if (cell != null && cell.Rowspan == rs + 1)
             {
                 tmp = cell.GetMaxHeight();
-                while (rs > 0)
+                var avgheight = tmp / (rs + 1);
+                PdfPRow iterrow;
+
+                for (var rowidx = idx - rs; rowidx < idx; rowidx++)
                 {
-                    tmp -= GetRowHeight(idx - rs);
-                    rs--;
+                    iterrow = rows[rowidx];
+
+                    if (avgheight > iterrow.MaxHeights)
+                    {
+                        iterrow.MaxHeights = height;
+                        tmp -= avgheight;
+                    }
+                    else
+                    {
+                        tmp -= iterrow.MaxHeights;
+                    }
                 }
             }
 
@@ -857,6 +908,7 @@ public class PdfPTable : ILargeElement
         }
 
         row.MaxHeights = height;
+
         return height;
     }
 
@@ -870,6 +922,7 @@ public class PdfPTable : ILargeElement
     public IList<PdfPRow> GetRows(int start, int end)
     {
         List<PdfPRow> list = new();
+
         if (start < 0 || end > Size)
         {
             return list;
@@ -878,34 +931,39 @@ public class PdfPTable : ILargeElement
         var firstRow = AdjustCellsInRow(start, end);
         var colIndex = 0;
         PdfPCell cell;
+
         while (colIndex < NumberOfColumns)
         {
             var rowIndex = start;
+
             while (RowSpanAbove(rowIndex--, colIndex))
             {
                 var row = GetRow(rowIndex);
+
                 if (row != null)
                 {
                     var replaceCell = row.GetCells()[colIndex];
+
                     if (replaceCell != null)
                     {
                         firstRow.GetCells()[colIndex] = new PdfPCell(replaceCell);
                         float extra = 0;
                         var stop = Math.Min(rowIndex + replaceCell.Rowspan, end);
+
                         for (var j = start + 1; j < stop; j++)
                         {
                             extra += GetRowHeight(j);
                         }
 
                         firstRow.SetExtraHeight(colIndex, extra);
-                        var diff = GetRowspanHeight(rowIndex, colIndex)
-                                   - GetRowHeight(start) - extra;
+                        var diff = GetRowspanHeight(rowIndex, colIndex) - GetRowHeight(start) - extra;
                         firstRow.GetCells()[colIndex].ConsumeHeight(diff);
                     }
                 }
             }
 
             cell = firstRow.GetCells()[colIndex];
+
             if (cell == null)
             {
                 colIndex++;
@@ -917,6 +975,7 @@ public class PdfPTable : ILargeElement
         }
 
         list.Add(firstRow);
+
         for (var i = start + 1; i < end; i++)
         {
             list.Add(AdjustCellsInRow(i, end));
@@ -941,18 +1000,21 @@ public class PdfPTable : ILargeElement
         }
 
         var row = rows[rowIndex];
+
         if (row == null || cellIndex >= row.GetCells().Length)
         {
             return 0;
         }
 
         var cell = row.GetCells()[cellIndex];
+
         if (cell == null)
         {
             return 0;
         }
 
         float rowspanHeight = 0;
+
         for (var j = 0; j < cell.Rowspan; j++)
         {
             rowspanHeight += GetRowHeight(rowIndex + j);
@@ -969,12 +1031,18 @@ public class PdfPTable : ILargeElement
     /// <param name="columnWidth">the absolute width of each column</param>
     public void SetTotalWidth(float[] columnWidth)
     {
+        if (columnWidth == null)
+        {
+            throw new ArgumentNullException(nameof(columnWidth));
+        }
+
         if (columnWidth.Length != NumberOfColumns)
         {
-            throw new DocumentException("Wrong number of columns.");
+            throw new DocumentException(message: "Wrong number of columns.");
         }
 
         totalWidth = 0;
+
         for (var k = 0; k < columnWidth.Length; ++k)
         {
             totalWidth += columnWidth[k];
@@ -991,12 +1059,23 @@ public class PdfPTable : ILargeElement
     /// <param name="pageSize">the page size</param>
     public void SetWidthPercentage(float[] columnWidth, Rectangle pageSize)
     {
+        if (columnWidth == null)
+        {
+            throw new ArgumentNullException(nameof(columnWidth));
+        }
+
+        if (pageSize == null)
+        {
+            throw new ArgumentNullException(nameof(pageSize));
+        }
+
         if (columnWidth.Length != NumberOfColumns)
         {
-            throw new ArgumentException("Wrong number of columns.");
+            throw new ArgumentException(message: "Wrong number of columns.");
         }
 
         float localTotalWidth = 0;
+
         for (var k = 0; k < columnWidth.Length; ++k)
         {
             localTotalWidth += columnWidth[k];
@@ -1014,17 +1093,22 @@ public class PdfPTable : ILargeElement
     /// <param name="relativeWidths">the relative widths of the table.</param>
     public void SetWidths(float[] relativeWidths)
     {
+        if (relativeWidths == null)
+        {
+            throw new ArgumentNullException(nameof(relativeWidths));
+        }
+
         if (relativeWidths.Length != NumberOfColumns)
         {
-            throw new DocumentException("Wrong number of columns.");
+            throw new DocumentException(message: "Wrong number of columns.");
         }
 
         RelativeWidths = new float[relativeWidths.Length];
-        Array.Copy(relativeWidths, 0, RelativeWidths, 0, relativeWidths.Length);
+        Array.Copy(relativeWidths, sourceIndex: 0, RelativeWidths, destinationIndex: 0, relativeWidths.Length);
         absoluteWidths = new float[relativeWidths.Length];
         totalHeight = 0;
         CalculateWidths();
-        CalculateHeights(true);
+        CalculateHeights(firsttime: true);
     }
 
     /// <summary>
@@ -1035,7 +1119,13 @@ public class PdfPTable : ILargeElement
     /// <param name="relativeWidths">the relative widths of the table.</param>
     public void SetWidths(int[] relativeWidths)
     {
+        if (relativeWidths == null)
+        {
+            throw new ArgumentNullException(nameof(relativeWidths));
+        }
+
         var tb = new float[relativeWidths.Length];
+
         for (var k = 0; k < relativeWidths.Length; ++k)
         {
             tb[k] = relativeWidths[k];
@@ -1057,8 +1147,8 @@ public class PdfPTable : ILargeElement
     /// <param name="yPos">the y write coodinate</param>
     /// <param name="canvases">an array of 4  PdfContentByte  obtained from</param>
     /// <returns>the y coordinate position of the bottom of the last row</returns>
-    public float WriteSelectedRows(int rowStart, int rowEnd, float xPos, float yPos, PdfContentByte[] canvases) =>
-        WriteSelectedRows(0, -1, rowStart, rowEnd, xPos, yPos, canvases);
+    public float WriteSelectedRows(int rowStart, int rowEnd, float xPos, float yPos, PdfContentByte[] canvases)
+        => WriteSelectedRows(colStart: 0, colEnd: -1, rowStart, rowEnd, xPos, yPos, canvases);
 
     /// <summary>
     ///     Writes the selected rows and columns to the document.
@@ -1079,15 +1169,21 @@ public class PdfPTable : ILargeElement
     /// <param name="yPos">the y write coodinate</param>
     /// <param name="canvases">an array of 4  PdfContentByte  obtained from</param>
     /// <returns>the y coordinate position of the bottom of the last row</returns>
-    public float WriteSelectedRows(int colStart, int colEnd, int rowStart, int rowEnd, float xPos, float yPos,
-                                   PdfContentByte[] canvases)
+    public float WriteSelectedRows(int colStart,
+        int colEnd,
+        int rowStart,
+        int rowEnd,
+        float xPos,
+        float yPos,
+        PdfContentByte[] canvases)
     {
         if (totalWidth <= 0)
         {
-            throw new ArgumentException("The table width must be greater than zero.");
+            throw new ArgumentException(message: "The table width must be greater than zero.");
         }
 
         var totalRows = rows.Count;
+
         if (rowStart < 0)
         {
             rowStart = 0;
@@ -1108,6 +1204,7 @@ public class PdfPTable : ILargeElement
         }
 
         var totalCols = NumberOfColumns;
+
         if (colStart < 0)
         {
             colStart = 0;
@@ -1127,9 +1224,11 @@ public class PdfPTable : ILargeElement
         }
 
         var yPosStart = yPos;
+
         for (var k = rowStart; k < rowEnd; ++k)
         {
             var row = rows[k];
+
             if (row != null)
             {
                 row.WriteCells(colStart, colEnd, xPos, yPos, canvases);
@@ -1141,10 +1240,12 @@ public class PdfPTable : ILargeElement
         {
             var heights = new float[rowEnd - rowStart + 1];
             heights[0] = yPosStart;
+
             for (var k = rowStart; k < rowEnd; ++k)
             {
                 var row = rows[k];
                 float hr = 0;
+
                 if (row != null)
                 {
                     hr = row.MaxHeights;
@@ -1154,7 +1255,7 @@ public class PdfPTable : ILargeElement
             }
 
             tableEvent.TableLayout(this, GetEventWidths(xPos, rowStart, rowEnd, HeadersInEvent), heights,
-                                   HeadersInEvent ? headerRows : 0, rowStart, canvases);
+                HeadersInEvent ? headerRows : 0, rowStart, canvases);
         }
 
         return yPos;
@@ -1171,8 +1272,8 @@ public class PdfPTable : ILargeElement
     /// <param name="yPos">the y write coodinate</param>
     /// <param name="canvas">the  PdfContentByte  where the rows will</param>
     /// <returns>the y coordinate position of the bottom of the last row</returns>
-    public float WriteSelectedRows(int rowStart, int rowEnd, float xPos, float yPos, PdfContentByte canvas) =>
-        WriteSelectedRows(0, -1, rowStart, rowEnd, xPos, yPos, canvas);
+    public float WriteSelectedRows(int rowStart, int rowEnd, float xPos, float yPos, PdfContentByte canvas)
+        => WriteSelectedRows(colStart: 0, colEnd: -1, rowStart, rowEnd, xPos, yPos, canvas);
 
     /// <summary>
     ///     Writes the selected rows to the document.
@@ -1190,10 +1291,21 @@ public class PdfPTable : ILargeElement
     /// <param name="yPos">the y write coodinate</param>
     /// <param name="canvas">the  PdfContentByte  where the rows will</param>
     /// <returns>the y coordinate position of the bottom of the last row</returns>
-    public float WriteSelectedRows(int colStart, int colEnd, int rowStart, int rowEnd, float xPos, float yPos,
-                                   PdfContentByte canvas)
+    public float WriteSelectedRows(int colStart,
+        int colEnd,
+        int rowStart,
+        int rowEnd,
+        float xPos,
+        float yPos,
+        PdfContentByte canvas)
     {
+        if (canvas == null)
+        {
+            throw new ArgumentNullException(nameof(canvas));
+        }
+
         var totalCols = NumberOfColumns;
+
         if (colStart < 0)
         {
             colStart = 0;
@@ -1217,6 +1329,7 @@ public class PdfPTable : ILargeElement
         if (clip)
         {
             float w = 0;
+
             for (var k = colStart; k < colEnd; ++k)
             {
                 w += absoluteWidths[k];
@@ -1225,7 +1338,7 @@ public class PdfPTable : ILargeElement
             canvas.SaveState();
             float lx = colStart == 0 ? 10000 : 0;
             float rx = colEnd == totalCols ? 10000 : 0;
-            canvas.Rectangle(xPos - lx, -10000, w + lx + rx, PdfPRow.RIGHT_LIMIT);
+            canvas.Rectangle(xPos - lx, y: -10000, w + lx + rx, PdfPRow.RIGHT_LIMIT);
             canvas.Clip();
             canvas.NewPath();
         }
@@ -1250,15 +1363,19 @@ public class PdfPTable : ILargeElement
             lastRow = Math.Max(lastRow, headerRows);
         }
 
-        var widths = new float[(includeHeaders ? headerRows : 0) + lastRow - firstRow][];
+        var numWidths = (includeHeaders ? headerRows : 0) + lastRow - firstRow;
+        var widths = new float[numWidths][];
+
         if (IsColspan)
         {
             var n = 0;
+
             if (includeHeaders)
             {
-                for (var k = 0; k < headerRows; ++k)
+                for (var k = 0; k < headerRows && n < numWidths; ++k)
                 {
                     var row = rows[k];
+
                     if (row == null)
                     {
                         ++n;
@@ -1270,9 +1387,10 @@ public class PdfPTable : ILargeElement
                 }
             }
 
-            for (; firstRow < lastRow; ++firstRow)
+            for (; firstRow < lastRow && n < numWidths; ++firstRow)
             {
                 var row = rows[firstRow];
+
                 if (row == null)
                 {
                     ++n;
@@ -1288,6 +1406,7 @@ public class PdfPTable : ILargeElement
             var numCols = NumberOfColumns;
             var width = new float[numCols + 1];
             width[0] = xPos;
+
             for (var k = 0; k < numCols; ++k)
             {
                 width[k + 1] = width[k] + absoluteWidths[k];
@@ -1302,6 +1421,24 @@ public class PdfPTable : ILargeElement
         return widths;
     }
 
+    private PdfPCell ObtainCell(int row, int col)
+    {
+        var cells = rows[row].GetCells();
+
+        for (var i = 0; i < cells.Length; i++)
+        {
+            if (cells[i] != null)
+            {
+                if (col >= i && col < i + cells[i].Colspan)
+                {
+                    return cells[i];
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     ///     Checks if there are rows above belonging to a rowspan.
     ///     @since    2.1.6
@@ -1311,30 +1448,31 @@ public class PdfPTable : ILargeElement
     /// <returns>true if there's a cell above that belongs to a rowspan</returns>
     internal bool RowSpanAbove(int currRow, int currCol)
     {
-        if (currCol >= NumberOfColumns
-            || currCol < 0
-            || currRow == 0)
+        if (currCol >= NumberOfColumns || currCol < 0 || currRow == 0)
         {
             return false;
         }
 
         var row = currRow - 1;
         var aboveRow = rows[row];
+
         if (aboveRow == null)
         {
             return false;
         }
 
-        var aboveCell = aboveRow.GetCells()[currCol];
+        var aboveCell = ObtainCell(row, currCol);
+
         while (aboveCell == null && row > 0)
         {
             aboveRow = rows[--row];
+
             if (aboveRow == null)
             {
                 return false;
             }
 
-            aboveCell = aboveRow.GetCells()[currCol];
+            aboveCell = ObtainCell(row, currCol);
         }
 
         var distance = currRow - row;
@@ -1342,10 +1480,11 @@ public class PdfPTable : ILargeElement
         if (aboveCell == null)
         {
             var col = currCol - 1;
-            aboveCell = aboveRow.GetCells()[col];
+            aboveCell = ObtainCell(row, col);
+
             while (aboveCell == null && col > 0)
             {
-                aboveCell = aboveRow.GetCells()[--col];
+                aboveCell = ObtainCell(row, --col);
             }
 
             return aboveCell != null && aboveCell.Rowspan > distance;
@@ -1357,6 +1496,7 @@ public class PdfPTable : ILargeElement
             aboveRow = rows[row + 1];
             distance--;
             aboveCell = aboveRow.GetCells()[col];
+
             while (aboveCell == null && col > 0)
             {
                 aboveCell = aboveRow.GetCells()[--col];
@@ -1366,7 +1506,7 @@ public class PdfPTable : ILargeElement
         return aboveCell != null && aboveCell.Rowspan > distance;
     }
 
-    protected internal void CalculateWidths()
+    internal protected void CalculateWidths()
     {
         if (totalWidth <= 0)
         {
@@ -1375,6 +1515,7 @@ public class PdfPTable : ILargeElement
 
         float total = 0;
         var numCols = NumberOfColumns;
+
         for (var k = 0; k < numCols; ++k)
         {
             total += RelativeWidths[k];
@@ -1390,12 +1531,17 @@ public class PdfPTable : ILargeElement
     ///     Copies the format of the sourceTable without copying the content.
     /// </summary>
     /// <param name="sourceTable"></param>
-    protected internal void CopyFormat(PdfPTable sourceTable)
+    internal protected void CopyFormat(PdfPTable sourceTable)
     {
+        if (sourceTable == null)
+        {
+            throw new ArgumentNullException(nameof(sourceTable));
+        }
+
         RelativeWidths = new float[sourceTable.NumberOfColumns];
         absoluteWidths = new float[sourceTable.NumberOfColumns];
-        Array.Copy(sourceTable.RelativeWidths, 0, RelativeWidths, 0, NumberOfColumns);
-        Array.Copy(sourceTable.absoluteWidths, 0, absoluteWidths, 0, NumberOfColumns);
+        Array.Copy(sourceTable.RelativeWidths, sourceIndex: 0, RelativeWidths, destinationIndex: 0, NumberOfColumns);
+        Array.Copy(sourceTable.absoluteWidths, sourceIndex: 0, absoluteWidths, destinationIndex: 0, NumberOfColumns);
         totalWidth = sourceTable.totalWidth;
         totalHeight = sourceTable.totalHeight;
         CurrentRowIdx = 0;
@@ -1433,9 +1579,11 @@ public class PdfPTable : ILargeElement
         row.InitExtraHeights();
         PdfPCell cell;
         var cells = row.GetCells();
+
         for (var i = 0; i < cells.Length; i++)
         {
             cell = cells[i];
+
             if (cell == null || cell.Rowspan == 1)
             {
                 continue;
@@ -1443,6 +1591,7 @@ public class PdfPTable : ILargeElement
 
             var stop = Math.Min(end, start + cell.Rowspan);
             float extra = 0;
+
             for (var k = start + 1; k < stop; k++)
             {
                 extra += GetRowHeight(k);
@@ -1462,6 +1611,7 @@ public class PdfPTable : ILargeElement
     private void skipColsWithRowspanAbove()
     {
         var direction = 1;
+
         if (runDirection == PdfWriter.RUN_DIRECTION_RTL)
         {
             direction = -1;

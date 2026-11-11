@@ -25,15 +25,13 @@ public class PdfNumber : PdfObject
     /// <param name="content">value of the new  PdfNumber -object</param>
     public PdfNumber(string content) : base(NUMBER)
     {
-        try
+        if (content == null)
         {
-            _value = double.Parse(content.Trim(), NumberFormatInfo.InvariantInfo);
-            Content = content;
+            throw new ArgumentNullException(nameof(content));
         }
-        catch (Exception nfe)
-        {
-            throw new Exception($"{content} is not a valid number - {nfe}");
-        }
+
+        _value = double.Parse(content.Trim(), NumberFormatInfo.InvariantInfo);
+        Content = content;
     }
 
     /// <summary>
@@ -43,7 +41,7 @@ public class PdfNumber : PdfObject
     public PdfNumber(int value) : base(NUMBER)
     {
         _value = value;
-        Content = value.ToString();
+        Content = value.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -80,7 +78,13 @@ public class PdfNumber : PdfObject
     /// <returns>a value</returns>
     public float FloatValue => (float)_value;
 
-    public int IntValue => (int)_value;
+    public int IntValue => unchecked((int)(long)_value);
+
+    /// <summary>
+    ///     Returns the primitive  long  value of this object.
+    /// </summary>
+    /// <returns>a value</returns>
+    public long LongValue => (long)_value;
 
     /// <summary>
     ///     other methods

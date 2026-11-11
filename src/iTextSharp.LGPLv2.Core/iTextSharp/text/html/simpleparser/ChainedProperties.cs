@@ -4,7 +4,11 @@ namespace iTextSharp.text.html.simpleparser;
 
 public class ChainedProperties
 {
-    public static int[] FontSizes = { 8, 10, 12, 14, 18, 24, 36 };
+    public static int[] FontSizes =
+    {
+        8, 10, 12, 14, 18, 24, 36
+    };
+
     public IList<TagAttributes> Chain = new List<TagAttributes>();
 
     public string this[string key]
@@ -15,9 +19,10 @@ public class ChainedProperties
             {
                 var p = Chain[k];
                 var attrs = p.Attrs;
-                if (attrs.ContainsKey(key))
+
+                if (attrs.TryGetValue(key, out var item))
                 {
-                    return attrs[key];
+                    return item;
                 }
             }
 
@@ -27,23 +32,33 @@ public class ChainedProperties
 
     public void AddToChain(string key, INullValueDictionary<string, string> prop)
     {
+        if (prop == null)
+        {
+            throw new ArgumentNullException(nameof(prop));
+        }
+
         // adjust the font size
         prop.TryGetValue(HtmlTags.SIZE, out var value);
+
         if (value == null)
         {
+            Chain.Add(new TagAttributes(key, prop));
+
             return;
         }
 
-        if (value.EndsWith("pt"))
+        if (value.EndsWith(value: "pt", StringComparison.OrdinalIgnoreCase))
         {
-            prop[ElementTags.SIZE] = value.Substring(0, value.Length - 2);
+            prop[ElementTags.SIZE] = value.Substring(startIndex: 0, value.Length - 2);
         }
         else
         {
             var s = 0;
-            if (value.StartsWith("+") || value.StartsWith("-"))
+
+            if (value.StartsWith(value: '+') || value.StartsWith(value: '-'))
             {
-                var old = this["basefontsize"];
+                var old = this[key: "basefontsize"];
+
                 if (old == null)
                 {
                     old = "12";
@@ -51,17 +66,20 @@ public class ChainedProperties
 
                 var f = float.Parse(old, NumberFormatInfo.InvariantInfo);
                 var c = (int)f;
+
                 for (var k = FontSizes.Length - 1; k >= 0; --k)
                 {
                     if (c >= FontSizes[k])
                     {
                         s = k;
+
                         break;
                     }
                 }
 
-                var inc = int.Parse(value.StartsWith("+") ? value.Substring(1) : value,
-                                    CultureInfo.InvariantCulture);
+                var inc = int.Parse(value.StartsWith(value: '+') ? value.Substring(startIndex: 1) : value,
+                    CultureInfo.InvariantCulture);
+
                 s += inc;
             }
             else
@@ -85,7 +103,7 @@ public class ChainedProperties
                 s = FontSizes.Length - 1;
             }
 
-            prop[ElementTags.SIZE] = FontSizes[s].ToString();
+            prop[ElementTags.SIZE] = FontSizes[s].ToString(CultureInfo.InvariantCulture);
         }
 
         Chain.Add(new TagAttributes(key, prop));
@@ -97,6 +115,7 @@ public class ChainedProperties
         {
             var p = Chain[k];
             var attrs = p.Attrs;
+
             if (attrs.ContainsKey(key))
             {
                 return true;
@@ -108,11 +127,17 @@ public class ChainedProperties
 
     public void RemoveChain(string key)
     {
+        if (key == null)
+        {
+            throw new ArgumentNullException(nameof(key));
+        }
+
         for (var k = Chain.Count - 1; k >= 0; --k)
         {
-            if (key.Equals(Chain[k].Tag))
+            if (key.Equals(Chain[k].Tag, StringComparison.OrdinalIgnoreCase))
             {
                 Chain.RemoveAt(k);
+
                 return;
             }
         }
@@ -130,6 +155,9 @@ public class ChainedProperties
         }
 
         public INullValueDictionary<string, string> Attrs { set; get; }
+
         public string Tag { set; get; }
+
+        public override string ToString() => $"{Tag}:{string.Join(separator: ", ", Attrs)}";
     }
 }

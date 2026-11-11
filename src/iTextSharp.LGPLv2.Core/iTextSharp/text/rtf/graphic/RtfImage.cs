@@ -29,62 +29,62 @@ public class RtfImage : RtfElement
     /// <summary>
     ///     Constant for a picture
     /// </summary>
-    private static readonly byte[] _picture = DocWriter.GetIsoBytes("\\pict");
+    private static readonly byte[] _picture = DocWriter.GetIsoBytes(text: "\\pict");
 
     /// <summary>
     ///     "\bin" constant
     /// </summary>
-    private static readonly byte[] _pictureBinaryData = DocWriter.GetIsoBytes("\\bin");
+    private static readonly byte[] _pictureBinaryData = DocWriter.GetIsoBytes(text: "\\bin");
 
     /// <summary>
     ///     Constant for the shape/picture group
     /// </summary>
-    private static readonly byte[] _pictureGroup = DocWriter.GetIsoBytes("\\*\\shppict");
+    private static readonly byte[] _pictureGroup = DocWriter.GetIsoBytes(text: "\\*\\shppict");
 
     /// <summary>
     ///     Constant for the picture height
     /// </summary>
-    private static readonly byte[] _pictureHeight = DocWriter.GetIsoBytes("\\pich");
+    private static readonly byte[] _pictureHeight = DocWriter.GetIsoBytes(text: "\\pich");
 
     /// <summary>
     ///     Constant for a jpeg image
     /// </summary>
-    private static readonly byte[] _pictureJpeg = DocWriter.GetIsoBytes("\\jpegblip");
+    private static readonly byte[] _pictureJpeg = DocWriter.GetIsoBytes(text: "\\jpegblip");
 
     /// <summary>
     ///     Constant for a png image
     /// </summary>
-    private static readonly byte[] _picturePng = DocWriter.GetIsoBytes("\\pngblip");
+    private static readonly byte[] _picturePng = DocWriter.GetIsoBytes(text: "\\pngblip");
 
     /// <summary>
     ///     Constant for the picture height scale
     /// </summary>
-    private static readonly byte[] _pictureScaledHeight = DocWriter.GetIsoBytes("\\pichgoal");
+    private static readonly byte[] _pictureScaledHeight = DocWriter.GetIsoBytes(text: "\\pichgoal");
 
     /// <summary>
     ///     Constant for the picture width scale
     /// </summary>
-    private static readonly byte[] _pictureScaledWidth = DocWriter.GetIsoBytes("\\picwgoal");
+    private static readonly byte[] _pictureScaledWidth = DocWriter.GetIsoBytes(text: "\\picwgoal");
 
     /// <summary>
     ///     Constant for horizontal picture scaling
     /// </summary>
-    private static readonly byte[] _pictureScaleX = DocWriter.GetIsoBytes("\\picscalex");
+    private static readonly byte[] _pictureScaleX = DocWriter.GetIsoBytes(text: "\\picscalex");
 
     /// <summary>
     ///     Constant for vertical picture scaling
     /// </summary>
-    private static readonly byte[] _pictureScaleY = DocWriter.GetIsoBytes("\\picscaley");
+    private static readonly byte[] _pictureScaleY = DocWriter.GetIsoBytes(text: "\\picscaley");
 
     /// <summary>
     ///     Constant for the picture width
     /// </summary>
-    private static readonly byte[] _pictureWidth = DocWriter.GetIsoBytes("\\picw");
+    private static readonly byte[] _pictureWidth = DocWriter.GetIsoBytes(text: "\\picw");
 
     /// <summary>
     ///     Constant for a wmf image
     /// </summary>
-    private static readonly byte[] _pictureWmf = DocWriter.GetIsoBytes("\\wmetafile8");
+    private static readonly byte[] _pictureWmf = DocWriter.GetIsoBytes(text: "\\wmetafile8");
 
     /// <summary>
     ///     The height of this picutre
@@ -131,6 +131,7 @@ public class RtfImage : RtfElement
     static RtfImage()
     {
         var c = '0';
+
         for (var k = 0; k < 16; k++)
         {
             for (var x = 0; x < 16; x++)
@@ -153,12 +154,18 @@ public class RtfImage : RtfElement
     /// <param name="image">The Image that this RtfImage wraps</param>
     public RtfImage(RtfDocument doc, Image image) : base(doc)
     {
-        _imageType = image.OriginalType;
-        if (!(_imageType == Image.ORIGINAL_JPEG || _imageType == Image.ORIGINAL_BMP
-                                                || _imageType == Image.ORIGINAL_PNG ||
-                                                _imageType == Image.ORIGINAL_WMF || _imageType == Image.ORIGINAL_GIF))
+        if (image == null)
         {
-            throw new DocumentException("Only BMP, PNG, WMF, GIF and JPEG images are supported by the RTF Writer");
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        _imageType = image.OriginalType;
+
+        if (!(_imageType == Image.ORIGINAL_JPEG || _imageType == Image.ORIGINAL_BMP ||
+              _imageType == Image.ORIGINAL_PNG || _imageType == Image.ORIGINAL_WMF || _imageType == Image.ORIGINAL_GIF))
+        {
+            throw new DocumentException(
+                message: "Only BMP, PNG, WMF, GIF and JPEG images are supported by the RTF Writer");
         }
 
         _alignment = image.Alignment;
@@ -173,135 +180,147 @@ public class RtfImage : RtfElement
     ///     Sets the alignment of this RtfImage. Uses the alignments from com.lowagie.text.Element.
     /// </summary>
     /// <param name="alignment">The alignment to use.</param>
-    public void SetAlignment(int alignment)
-    {
-        _alignment = alignment;
-    }
+    public void SetAlignment(int alignment) => _alignment = alignment;
 
     /// <summary>
     ///     Set whether this RtfImage should behave like a top level element
     ///     and enclose itself in a paragraph.
     /// </summary>
     /// <param name="topLevelElement">Whether to behave like a top level element.</param>
-    public void SetTopLevelElement(bool topLevelElement)
-    {
-        _topLevelElement = topLevelElement;
-    }
+    public void SetTopLevelElement(bool topLevelElement) => _topLevelElement = topLevelElement;
 
     /// <summary>
     ///     Writes the RtfImage content
     /// </summary>
-    public override void WriteContent(Stream result)
+    public override void WriteContent(Stream outp)
     {
+        if (outp == null)
+        {
+            throw new ArgumentNullException(nameof(outp));
+        }
+
         byte[] t;
+
         if (_topLevelElement)
         {
-            result.Write(RtfPhrase.ParagraphDefaults, 0, RtfPhrase.ParagraphDefaults.Length);
+            outp.Write(RtfPhrase.ParagraphDefaults, offset: 0, RtfPhrase.ParagraphDefaults.Length);
+
             switch (_alignment)
             {
                 case Element.ALIGN_LEFT:
-                    result.Write(RtfParagraphStyle.AlignLeft, 0, RtfParagraphStyle.AlignLeft.Length);
+                    outp.Write(RtfParagraphStyle.AlignLeft, offset: 0, RtfParagraphStyle.AlignLeft.Length);
+
                     break;
                 case Element.ALIGN_RIGHT:
-                    result.Write(RtfParagraphStyle.AlignRight, 0, RtfParagraphStyle.AlignRight.Length);
+                    outp.Write(RtfParagraphStyle.AlignRight, offset: 0, RtfParagraphStyle.AlignRight.Length);
+
                     break;
                 case Element.ALIGN_CENTER:
-                    result.Write(RtfParagraphStyle.AlignCenter, 0, RtfParagraphStyle.AlignCenter.Length);
+                    outp.Write(RtfParagraphStyle.AlignCenter, offset: 0, RtfParagraphStyle.AlignCenter.Length);
+
                     break;
                 case Element.ALIGN_JUSTIFIED:
-                    result.Write(RtfParagraphStyle.AlignJustify, 0, RtfParagraphStyle.AlignJustify.Length);
+                    outp.Write(RtfParagraphStyle.AlignJustify, offset: 0, RtfParagraphStyle.AlignJustify.Length);
+
                     break;
             }
         }
 
-        result.Write(OpenGroup, 0, OpenGroup.Length);
-        result.Write(_pictureGroup, 0, _pictureGroup.Length);
-        result.Write(OpenGroup, 0, OpenGroup.Length);
-        result.Write(_picture, 0, _picture.Length);
+        outp.Write(OpenGroup, offset: 0, OpenGroup.Length);
+        outp.Write(_pictureGroup, offset: 0, _pictureGroup.Length);
+        outp.Write(OpenGroup, offset: 0, OpenGroup.Length);
+        outp.Write(_picture, offset: 0, _picture.Length);
+
         switch (_imageType)
         {
             case Image.ORIGINAL_JPEG:
-                result.Write(_pictureJpeg, 0, _pictureJpeg.Length);
+                outp.Write(_pictureJpeg, offset: 0, _pictureJpeg.Length);
+
                 break;
             case Image.ORIGINAL_PNG:
             case Image.ORIGINAL_GIF:
-                result.Write(_picturePng, 0, _picturePng.Length);
+                outp.Write(_picturePng, offset: 0, _picturePng.Length);
+
                 break;
             case Image.ORIGINAL_WMF:
             case Image.ORIGINAL_BMP:
-                result.Write(_pictureWmf, 0, _pictureWmf.Length);
+                outp.Write(_pictureWmf, offset: 0, _pictureWmf.Length);
+
                 break;
         }
 
-        result.Write(_pictureWidth, 0, _pictureWidth.Length);
-        result.Write(t = IntToByteArray((int)_width), 0, t.Length);
-        result.Write(_pictureHeight, 0, _pictureHeight.Length);
-        result.Write(t = IntToByteArray((int)_height), 0, t.Length);
+        outp.Write(_pictureWidth, offset: 0, _pictureWidth.Length);
+        outp.Write(t = IntToByteArray((int)_width), offset: 0, t.Length);
+        outp.Write(_pictureHeight, offset: 0, _pictureHeight.Length);
+        outp.Write(t = IntToByteArray((int)_height), offset: 0, t.Length);
+
         if (Document.GetDocumentSettings().IsWriteImageScalingInformation())
         {
-            result.Write(_pictureScaleX, 0, _pictureScaleX.Length);
-            result.Write(t = IntToByteArray((int)(100 * _plainWidth / _width)), 0, t.Length);
-            result.Write(_pictureScaleY, 0, _pictureScaleY.Length);
-            result.Write(t = IntToByteArray((int)(100 * _plainHeight / _height)), 0, t.Length);
+            outp.Write(_pictureScaleX, offset: 0, _pictureScaleX.Length);
+            outp.Write(t = IntToByteArray((int)(100 * _plainWidth / _width)), offset: 0, t.Length);
+            outp.Write(_pictureScaleY, offset: 0, _pictureScaleY.Length);
+            outp.Write(t = IntToByteArray((int)(100 * _plainHeight / _height)), offset: 0, t.Length);
         }
 
         if (Document.GetDocumentSettings().IsImagePdfConformance())
         {
-            result.Write(_pictureScaledWidth, 0, _pictureScaledWidth.Length);
-            result.Write(t = IntToByteArray((int)(_plainWidth * TWIPS_FACTOR)), 0, t.Length);
-            result.Write(_pictureScaledHeight, 0, _pictureScaledHeight.Length);
-            result.Write(t = IntToByteArray((int)(_plainHeight * TWIPS_FACTOR)), 0, t.Length);
+            outp.Write(_pictureScaledWidth, offset: 0, _pictureScaledWidth.Length);
+            outp.Write(t = IntToByteArray((int)(_plainWidth * TWIPS_FACTOR)), offset: 0, t.Length);
+            outp.Write(_pictureScaledHeight, offset: 0, _pictureScaledHeight.Length);
+            outp.Write(t = IntToByteArray((int)(_plainHeight * TWIPS_FACTOR)), offset: 0, t.Length);
         }
         else
         {
             if (_width.ApproxNotEqual(_plainWidth) || _imageType == Image.ORIGINAL_BMP)
             {
-                result.Write(_pictureScaledWidth, 0, _pictureScaledWidth.Length);
-                result.Write(t = IntToByteArray((int)(_plainWidth * PixelTwipsFactor)), 0, t.Length);
+                outp.Write(_pictureScaledWidth, offset: 0, _pictureScaledWidth.Length);
+                outp.Write(t = IntToByteArray((int)(_plainWidth * PixelTwipsFactor)), offset: 0, t.Length);
             }
 
             if (_height.ApproxNotEqual(_plainHeight) || _imageType == Image.ORIGINAL_BMP)
             {
-                result.Write(_pictureScaledHeight, 0, _pictureScaledHeight.Length);
-                result.Write(t = IntToByteArray((int)(_plainHeight * PixelTwipsFactor)), 0, t.Length);
+                outp.Write(_pictureScaledHeight, offset: 0, _pictureScaledHeight.Length);
+                outp.Write(t = IntToByteArray((int)(_plainHeight * PixelTwipsFactor)), offset: 0, t.Length);
             }
         }
 
         if (Document.GetDocumentSettings().IsImageWrittenAsBinary())
         {
             //binary
-            result.WriteByte((byte)'\n');
-            result.Write(_pictureBinaryData, 0, _pictureBinaryData.Length);
-            result.Write(t = IntToByteArray(imageDataSize()), 0, t.Length);
-            result.Write(Delimiter, 0, Delimiter.Length);
-            if (result is RtfByteArrayBuffer)
+            outp.WriteByte((byte)'\n');
+            outp.Write(_pictureBinaryData, offset: 0, _pictureBinaryData.Length);
+            outp.Write(t = IntToByteArray(imageDataSize()), offset: 0, t.Length);
+            outp.Write(Delimiter, offset: 0, Delimiter.Length);
+
+            if (outp is RtfByteArrayBuffer buffer)
             {
-                ((RtfByteArrayBuffer)result).Append(_imageData);
+                buffer.Append(_imageData);
             }
             else
             {
                 for (var k = 0; k < _imageData.Length; k++)
                 {
-                    result.Write(_imageData[k], 0, _imageData[k].Length);
+                    outp.Write(_imageData[k], offset: 0, _imageData[k].Length);
                 }
             }
         }
         else
         {
             //hex encoded
-            result.Write(Delimiter, 0, Delimiter.Length);
-            result.WriteByte((byte)'\n');
-            writeImageDataHexEncoded(result);
+            outp.Write(Delimiter, offset: 0, Delimiter.Length);
+            outp.WriteByte((byte)'\n');
+            writeImageDataHexEncoded(outp);
         }
 
-        result.Write(CloseGroup, 0, CloseGroup.Length);
-        result.Write(CloseGroup, 0, CloseGroup.Length);
+        outp.Write(CloseGroup, offset: 0, CloseGroup.Length);
+        outp.Write(CloseGroup, offset: 0, CloseGroup.Length);
+
         if (_topLevelElement)
         {
-            result.Write(RtfParagraph.Paragraph, 0, RtfParagraph.Paragraph.Length);
+            outp.Write(RtfParagraph.Paragraph, offset: 0, RtfParagraph.Paragraph.Length);
         }
 
-        result.WriteByte((byte)'\n');
+        outp.WriteByte((byte)'\n');
     }
 
     /// <summary>
@@ -324,9 +343,11 @@ public class RtfImage : RtfElement
             else
             {
                 var iod = image.OriginalData;
+
                 if (iod == null)
                 {
                     var imageIn = image.Url.GetResponseStream();
+
                     if (_imageType == Image.ORIGINAL_WMF)
                     {
                         //remove the placeable header first
@@ -334,7 +355,7 @@ public class RtfImage : RtfElement
                         {
                             if (imageIn.ReadByte() < 0)
                             {
-                                throw new IOException("while removing wmf placeable header");
+                                throw new IOException(message: "while removing wmf placeable header");
                             }
                         }
                     }
@@ -371,6 +392,7 @@ public class RtfImage : RtfElement
     private int imageDataSize()
     {
         var size = 0;
+
         for (var k = 0; k < _imageData.Length; k++)
         {
             size += _imageData[k].Length;
@@ -386,12 +408,15 @@ public class RtfImage : RtfElement
     private void writeImageDataHexEncoded(Stream bab)
     {
         var cnt = 0;
+
         for (var k = 0; k < _imageData.Length; k++)
         {
             var chunk = _imageData[k];
+
             for (var x = 0; x < chunk.Length; x++)
             {
-                bab.Write(Byte2CharLut, (chunk[x] & 0xff) * 2, 2);
+                bab.Write(Byte2CharLut, (chunk[x] & 0xff) * 2, count: 2);
+
                 if (++cnt == 64)
                 {
                     bab.WriteByte((byte)'\n');

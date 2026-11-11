@@ -24,7 +24,7 @@ public class RtfDiskCache : IRtfDataCache
     /// </summary>
     public RtfDiskCache()
     {
-        _tempFile = Path.GetTempFileName();
+        _tempFile = Path.GetRandomFileName();
         _data = new BufferedStream(new FileStream(_tempFile, FileMode.Create));
     }
 
@@ -38,6 +38,11 @@ public class RtfDiskCache : IRtfDataCache
     /// </summary>
     public void WriteTo(Stream target)
     {
+        if (target == null)
+        {
+            throw new ArgumentNullException(nameof(target));
+        }
+
         _data.Dispose();
         var tempIn = new BufferedStream(new FileStream(_tempFile, FileMode.Open));
         var buffer = new byte[8192];

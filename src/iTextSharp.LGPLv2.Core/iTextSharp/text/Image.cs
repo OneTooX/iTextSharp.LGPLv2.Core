@@ -10,8 +10,6 @@ namespace iTextSharp.text;
 ///     An Image is the representation of a graphic element (JPEG, PNG or GIF)
 ///     that has to be inserted into the document
 /// </summary>
-/// <seealso cref="T:iTextSharp.text.Element" />
-/// <seealso cref="T:iTextSharp.text.Rectangle" />
 public abstract class Image : Rectangle
 {
     /// <summary>
@@ -109,6 +107,12 @@ public abstract class Image : Rectangle
     ///     serial stamping
     /// </summary>
     private static object _serialId = 0L;
+
+#if NET_9 || NET_10
+    private static readonly Lock _mutex = new();
+#else
+    private static readonly object _mutex = new();
+#endif
 
     /// <summary>
     ///     Holds value of property initialRotation.
@@ -245,7 +249,7 @@ public abstract class Image : Rectangle
     ///     Constructs an Image-object, using an url.
     /// </summary>
     /// <param name="url">the URL where the image can be found.</param>
-    protected Image(Uri url) : base(0, 0)
+    protected Image(Uri url) : base(urx: 0, ury: 0)
     {
         this.url = url;
         alignment = DEFAULT;
@@ -258,6 +262,11 @@ public abstract class Image : Rectangle
     /// <param name="image">another Image object.</param>
     protected Image(Image image) : base(image)
     {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
         type = image.type;
         url = image.url;
         alignment = image.alignment;
@@ -414,14 +423,19 @@ public abstract class Image : Rectangle
 
         set
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             if (Mask)
             {
-                throw new DocumentException("An image mask cannot contain another image mask.");
+                throw new DocumentException(message: "An image mask cannot contain another image mask.");
             }
 
             if (!value.Mask)
             {
-                throw new DocumentException("The image mask is not a mask. Did you do MakeMask()?");
+                throw new DocumentException(message: "The image mask is not a mask. Did you do MakeMask()?");
             }
 
             imageMask = value;
@@ -498,6 +512,7 @@ public abstract class Image : Rectangle
             matrix[AY] = plainWidth * sinX;
             matrix[BX] = -plainHeight * sinX;
             matrix[BY] = plainHeight * cosX;
+
             if (RotationRadians < Math.PI / 2f)
             {
                 matrix[CX] = matrix[BX];
@@ -581,6 +596,7 @@ public abstract class Image : Rectangle
         {
             var d = Math.PI; //__IDS__
             RotationRadians = (float)((value + _initialRotation) % (2.0 * d)); //__IDS__
+
             if (RotationRadians < 0)
             {
                 RotationRadians += (float)(2.0 * d); //__IDS__
@@ -702,150 +718,158 @@ public abstract class Image : Rectangle
     /// <returns>an object of type Gif, Jpeg or Png</returns>
     public static Image GetInstance(Uri url)
     {
+        if (url == null)
+        {
+            throw new ArgumentNullException(nameof(url));
+        }
+
         // Add support for base64 encoded images.
-        if (url.Scheme == "data")
+        if (string.Equals(url.Scheme, b: "data", StringComparison.Ordinal))
         {
             var src = url.AbsoluteUri;
-            if (src.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+
+            if (IsBase64EncodedImage(src))
             {
-                // data:[<MIME-type>][;charset=<encoding>][;base64],<data>
-                var base64Data = src.Substring(src.IndexOf(",", StringComparison.OrdinalIgnoreCase) + 1);
-                var imagedata = Convert.FromBase64String(base64Data);
-                return GetInstance(imagedata);
+                return GetBase64EncodedImage(src);
             }
         }
 
-        Stream istr = null;
-        try
+        using var istr = url.GetResponseStream();
+        var c1 = istr.ReadByte();
+        var c2 = istr.ReadByte();
+        var c3 = istr.ReadByte();
+        var c4 = istr.ReadByte();
+
+        // jbig2
+        var c5 = istr.ReadByte();
+        var c6 = istr.ReadByte();
+        var c7 = istr.ReadByte();
+        var c8 = istr.ReadByte();
+
+        if (c1 == 'G' && c2 == 'I' && c3 == 'F')
         {
-            istr = url.GetResponseStream();
-            var c1 = istr.ReadByte();
-            var c2 = istr.ReadByte();
-            var c3 = istr.ReadByte();
-            var c4 = istr.ReadByte();
-            // jbig2
-            var c5 = istr.ReadByte();
-            var c6 = istr.ReadByte();
-            var c7 = istr.ReadByte();
-            var c8 = istr.ReadByte();
-            istr.Dispose();
+            var gif = new GifImage(url);
+            var img = gif.GetImage(frame: 1);
 
-            istr = null;
-            if (c1 == 'G' && c2 == 'I' && c3 == 'F')
-            {
-                var gif = new GifImage(url);
-                var img = gif.GetImage(1);
-                return img;
-            }
-
-            if (c1 == 0xFF && c2 == 0xD8)
-            {
-                return new Jpeg(url);
-            }
-
-            if (c1 == 0x00 && c2 == 0x00 && c3 == 0x00 && c4 == 0x0c)
-            {
-                return new Jpeg2000(url);
-            }
-
-            if (c1 == 0xff && c2 == 0x4f && c3 == 0xff && c4 == 0x51)
-            {
-                return new Jpeg2000(url);
-            }
-
-            if (c1 == PngImage.Pngid[0] && c2 == PngImage.Pngid[1]
-                                        && c3 == PngImage.Pngid[2] && c4 == PngImage.Pngid[3])
-            {
-                var img = PngImage.GetImage(url);
-                return img;
-            }
-
-            if (c1 == 0xD7 && c2 == 0xCD)
-            {
-                Image img = new ImgWmf(url);
-                return img;
-            }
-
-            if (c1 == 'B' && c2 == 'M')
-            {
-                var img = BmpImage.GetImage(url);
-                return img;
-            }
-
-            if ((c1 == 'M' && c2 == 'M' && c3 == 0 && c4 == 42)
-                || (c1 == 'I' && c2 == 'I' && c3 == 42 && c4 == 0))
-            {
-                RandomAccessFileOrArray ra = null;
-                try
-                {
-                    if (url.IsFile)
-                    {
-                        var file = url.LocalPath;
-                        ra = new RandomAccessFileOrArray(file);
-                    }
-                    else
-                    {
-                        ra = new RandomAccessFileOrArray(url);
-                    }
-
-                    var img = TiffImage.GetTiffImage(ra, 1);
-                    img.url = url;
-                    return img;
-                }
-                finally
-                {
-                    if (ra != null)
-                    {
-                        ra.Close();
-                    }
-                }
-            }
-
-            if (c1 == 0x97 && c2 == 'J' && c3 == 'B' && c4 == '2' &&
-                c5 == '\r' && c6 == '\n' && c7 == 0x1a && c8 == '\n')
-            {
-                RandomAccessFileOrArray ra = null;
-                try
-                {
-                    if (url.IsFile)
-                    {
-                        var file = url.LocalPath;
-                        ra = new RandomAccessFileOrArray(file);
-                    }
-                    else
-                    {
-                        ra = new RandomAccessFileOrArray(url);
-                    }
-
-                    var img = Jbig2Image.GetJbig2Image(ra, 1);
-                    img.url = url;
-                    return img;
-                }
-                finally
-                {
-                    if (ra != null)
-                    {
-                        ra.Close();
-                    }
-                }
-            }
-
-            throw new IOException(url
-                                  + " is not a recognized imageformat.");
+            return img;
         }
-        finally
+
+        if (c1 == 0xFF && c2 == 0xD8)
         {
-            if (istr != null)
+            return new Jpeg(url);
+        }
+
+        if (c1 == 0x00 && c2 == 0x00 && c3 == 0x00 && c4 == 0x0c)
+        {
+            return new Jpeg2000(url);
+        }
+
+        if (c1 == 0xff && c2 == 0x4f && c3 == 0xff && c4 == 0x51)
+        {
+            return new Jpeg2000(url);
+        }
+
+        if (c1 == PngImage.Pngid[0] && c2 == PngImage.Pngid[1] && c3 == PngImage.Pngid[2] && c4 == PngImage.Pngid[3])
+        {
+            var img = PngImage.GetImage(url);
+
+            return img;
+        }
+
+        if (c1 == 0xD7 && c2 == 0xCD)
+        {
+            Image img = new ImgWmf(url);
+
+            return img;
+        }
+
+        if (c1 == 'B' && c2 == 'M')
+        {
+            var img = BmpImage.GetImage(url);
+
+            return img;
+        }
+
+        if ((c1 == 'M' && c2 == 'M' && c3 == 0 && c4 == 42) || (c1 == 'I' && c2 == 'I' && c3 == 42 && c4 == 0))
+        {
+            RandomAccessFileOrArray ra = null;
+
+            try
             {
-                istr.Dispose();
+                if (url.IsFile)
+                {
+                    var file = url.LocalPath;
+                    ra = new RandomAccessFileOrArray(file);
+                }
+                else
+                {
+                    ra = new RandomAccessFileOrArray(url);
+                }
+
+                var img = TiffImage.GetTiffImage(ra, page: 1);
+                img.url = url;
+
+                return img;
+            }
+            finally
+            {
+                if (ra != null)
+                {
+                    ra.Close();
+                }
             }
         }
+
+        if (c1 == 0x97 && c2 == 'J' && c3 == 'B' && c4 == '2' && c5 == '\r' && c6 == '\n' && c7 == 0x1a && c8 == '\n')
+        {
+            RandomAccessFileOrArray ra = null;
+
+            try
+            {
+                if (url.IsFile)
+                {
+                    var file = url.LocalPath;
+                    ra = new RandomAccessFileOrArray(file);
+                }
+                else
+                {
+                    ra = new RandomAccessFileOrArray(url);
+                }
+
+                var img = Jbig2Image.GetJbig2Image(ra, page: 1);
+                img.url = url;
+
+                return img;
+            }
+            finally
+            {
+                if (ra != null)
+                {
+                    ra.Close();
+                }
+            }
+        }
+
+        throw new IOException(url + " is not a recognized image format.");
     }
+
+    private static Image GetBase64EncodedImage(string src)
+    {
+        // data:[<MIME-type>][;charset=<encoding>][;base64],<data>
+        var base64Data = src.Substring(src.IndexOf(value: ',', StringComparison.OrdinalIgnoreCase) + 1);
+        var imageData = Convert.FromBase64String(base64Data);
+
+        return GetInstance(imageData);
+    }
+
+    private static bool IsBase64EncodedImage(string src)
+        => src.StartsWith(value: "data:image/", StringComparison.OrdinalIgnoreCase);
 
     public static Image GetInstance(Stream s)
     {
         var a = RandomAccessFileOrArray.InputStreamToArray(s);
         s.Dispose();
+
         return GetInstance(a);
     }
 
@@ -860,6 +884,7 @@ public abstract class Image : Rectangle
     public static Image GetInstance(int width, int height, byte[] data, byte[] globals)
     {
         Image img = new ImgJbig2(width, height, data, globals);
+
         return img;
     }
 
@@ -870,6 +895,11 @@ public abstract class Image : Rectangle
     /// <returns>an object of type Gif, Jpeg or Png</returns>
     public static Image GetInstance(byte[] imgb)
     {
+        if (imgb == null)
+        {
+            throw new ArgumentNullException(nameof(imgb));
+        }
+
         int c1 = imgb[0];
         int c2 = imgb[1];
         int c3 = imgb[2];
@@ -878,7 +908,8 @@ public abstract class Image : Rectangle
         if (c1 == 'G' && c2 == 'I' && c3 == 'F')
         {
             var gif = new GifImage(imgb);
-            return gif.GetImage(1);
+
+            return gif.GetImage(frame: 1);
         }
 
         if (c1 == 0xFF && c2 == 0xD8)
@@ -896,8 +927,7 @@ public abstract class Image : Rectangle
             return new Jpeg2000(imgb);
         }
 
-        if (c1 == PngImage.Pngid[0] && c2 == PngImage.Pngid[1]
-                                    && c3 == PngImage.Pngid[2] && c4 == PngImage.Pngid[3])
+        if (c1 == PngImage.Pngid[0] && c2 == PngImage.Pngid[1] && c3 == PngImage.Pngid[2] && c4 == PngImage.Pngid[3])
         {
             return PngImage.GetImage(imgb);
         }
@@ -912,14 +942,15 @@ public abstract class Image : Rectangle
             return BmpImage.GetImage(imgb);
         }
 
-        if ((c1 == 'M' && c2 == 'M' && c3 == 0 && c4 == 42)
-            || (c1 == 'I' && c2 == 'I' && c3 == 42 && c4 == 0))
+        if ((c1 == 'M' && c2 == 'M' && c3 == 0 && c4 == 42) || (c1 == 'I' && c2 == 'I' && c3 == 42 && c4 == 0))
         {
             RandomAccessFileOrArray ra = null;
+
             try
             {
                 ra = new RandomAccessFileOrArray(imgb);
-                var img = TiffImage.GetTiffImage(ra, 1);
+                var img = TiffImage.GetTiffImage(ra, page: 1);
+
                 if (img.OriginalData == null)
                 {
                     img.OriginalData = imgb;
@@ -936,7 +967,7 @@ public abstract class Image : Rectangle
             }
         }
 
-        throw new IOException("The byte array is not a recognized imageformat.");
+        throw new IOException(message: "The byte array is not a recognized imageformat.");
     }
 
     /// <summary>
@@ -948,10 +979,16 @@ public abstract class Image : Rectangle
     /// <returns></returns>
     public static Image GetInstance(SKBitmap image, SKEncodedImageFormat format, int quality = 100)
     {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
         using var data = image.Encode(format, quality);
         using var stream = new MemoryStream();
         data.SaveTo(stream);
         var imageArray = stream.ToArray();
+
         return GetInstance(imageArray);
     }
 
@@ -967,10 +1004,16 @@ public abstract class Image : Rectangle
     /// <returns>an object of type ImgRaw</returns>
     public static Image GetInstance(SKBitmap image, BaseColor color, bool forceBw)
     {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
         var bm = image;
         var w = bm.Width;
         var h = bm.Height;
         var pxv = 0;
+
         if (forceBw)
         {
             var byteWidth = w / 8 + ((w & 7) != 0 ? 1 : 0);
@@ -979,15 +1022,17 @@ public abstract class Image : Rectangle
             var index = 0;
             var size = h * w;
             var transColor = 1;
+
             if (color != null)
             {
                 transColor = color.R + color.G + color.B < 384 ? 0 : 1;
             }
 
-            int[] transparency = null;
+            int[] ints = null;
             var cbyte = 0x80;
             var wMarker = 0;
             var currByte = 0;
+
             if (color != null)
             {
                 for (var j = 0; j < h; j++)
@@ -995,6 +1040,7 @@ public abstract class Image : Rectangle
                     for (var i = 0; i < w; i++)
                     {
                         int alpha = bm.GetPixel(i, j).Alpha;
+
                         if (alpha < 250)
                         {
                             if (transColor == 1)
@@ -1011,6 +1057,7 @@ public abstract class Image : Rectangle
                         }
 
                         cbyte >>= 1;
+
                         if (cbyte == 0 || wMarker + 1 >= w)
                         {
                             pixelsByte[index++] = (byte)currByte;
@@ -1019,6 +1066,7 @@ public abstract class Image : Rectangle
                         }
 
                         ++wMarker;
+
                         if (wMarker >= w)
                         {
                             wMarker = 0;
@@ -1032,13 +1080,14 @@ public abstract class Image : Rectangle
                 {
                     for (var i = 0; i < w; i++)
                     {
-                        if (transparency == null)
+                        if (ints == null)
                         {
                             int alpha = bm.GetPixel(i, j).Alpha;
+
                             if (alpha == 0)
                             {
-                                transparency = new int[2];
-                                transparency[0] = transparency[1] = (bm.GetPixel(i, j).ToArgb() & 0x888) != 0 ? 1 : 0;
+                                ints = new int[2];
+                                ints[0] = ints[1] = (bm.GetPixel(i, j).ToArgb() & 0x888) != 0 ? 1 : 0;
                             }
                         }
 
@@ -1048,6 +1097,7 @@ public abstract class Image : Rectangle
                         }
 
                         cbyte >>= 1;
+
                         if (cbyte == 0 || wMarker + 1 >= w)
                         {
                             pixelsByte[index++] = (byte)currByte;
@@ -1056,6 +1106,7 @@ public abstract class Image : Rectangle
                         }
 
                         ++wMarker;
+
                         if (wMarker >= w)
                         {
                             wMarker = 0;
@@ -1064,7 +1115,7 @@ public abstract class Image : Rectangle
                 }
             }
 
-            return GetInstance(w, h, 1, 1, pixelsByte, transparency);
+            return GetInstance(w, h, components: 1, bpc: 1, pixelsByte, ints);
         }
         else
         {
@@ -1076,6 +1127,7 @@ public abstract class Image : Rectangle
             var red = 255;
             var green = 255;
             var blue = 255;
+
             if (color != null)
             {
                 red = color.R;
@@ -1083,7 +1135,8 @@ public abstract class Image : Rectangle
                 blue = color.B;
             }
 
-            int[] transparency = null;
+            int[] ints = null;
+
             if (color != null)
             {
                 for (var j = 0; j < h; j++)
@@ -1091,6 +1144,7 @@ public abstract class Image : Rectangle
                     for (var i = 0; i < w; i++)
                     {
                         var alpha = (bm.GetPixel(i, j).ToArgb() >> 24) & 0xff;
+
                         if (alpha < 250)
                         {
                             pixelsByte[index++] = (byte)red;
@@ -1113,12 +1167,14 @@ public abstract class Image : Rectangle
                 smask = new byte[w * h];
                 var shades = false;
                 var smaskPtr = 0;
+
                 for (var j = 0; j < h; j++)
                 {
                     for (var i = 0; i < w; i++)
                     {
                         pxv = bm.GetPixel(i, j).ToArgb();
                         var alpha = smask[smaskPtr++] = (byte)((pxv >> 24) & 0xff);
+
                         /* bugfix by Chris Nokleberg */
                         if (!shades)
                         {
@@ -1126,15 +1182,15 @@ public abstract class Image : Rectangle
                             {
                                 shades = true;
                             }
-                            else if (transparency == null)
+                            else if (ints == null)
                             {
                                 if (alpha == 0)
                                 {
                                     transparentPixel = pxv & 0xffffff;
-                                    transparency = new int[6];
-                                    transparency[0] = transparency[1] = (transparentPixel >> 16) & 0xff;
-                                    transparency[2] = transparency[3] = (transparentPixel >> 8) & 0xff;
-                                    transparency[4] = transparency[5] = transparentPixel & 0xff;
+                                    ints = new int[6];
+                                    ints[0] = ints[1] = (transparentPixel >> 16) & 0xff;
+                                    ints[2] = ints[3] = (transparentPixel >> 8) & 0xff;
+                                    ints[4] = ints[5] = transparentPixel & 0xff;
                                 }
                             }
                             else if ((pxv & 0xffffff) != transparentPixel)
@@ -1151,7 +1207,7 @@ public abstract class Image : Rectangle
 
                 if (shades)
                 {
-                    transparency = null;
+                    ints = null;
                 }
                 else
                 {
@@ -1159,10 +1215,11 @@ public abstract class Image : Rectangle
                 }
             }
 
-            var img = GetInstance(w, h, 3, 8, pixelsByte, transparency);
+            var img = GetInstance(w, h, components: 3, bpc: 8, pixelsByte, ints);
+
             if (smask != null)
             {
-                var sm = GetInstance(w, h, 1, 8, smask);
+                var sm = GetInstance(w, h, components: 1, bpc: 8, smask);
                 sm.MakeMask();
                 img.ImageMask = sm;
             }
@@ -1180,14 +1237,24 @@ public abstract class Image : Rectangle
     ///     pixels are replaced by this color
     /// </param>
     /// <returns>an object of type ImgRaw</returns>
-    public static Image GetInstance(SKBitmap image, BaseColor color) => GetInstance(image, color, false);
+    public static Image GetInstance(SKBitmap image, BaseColor color) => GetInstance(image, color, forceBw: false);
 
     /// <summary>
     ///     Gets an instance of an Image.
     /// </summary>
     /// <param name="filename">a filename</param>
     /// <returns>an object of type Gif, Jpeg or Png</returns>
-    public static Image GetInstance(string filename) => GetInstance(Utilities.ToUrl(filename));
+    public static Image GetInstance(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename))
+        {
+            throw new ArgumentNullException(nameof(filename));
+        }
+
+        return IsBase64EncodedImage(filename)
+            ? GetBase64EncodedImage(filename)
+            : GetInstance(Utilities.ToUrl(filename));
+    }
 
     /// <summary>
     ///     Gets an instance of an Image in raw mode.
@@ -1198,8 +1265,8 @@ public abstract class Image : Rectangle
     /// <param name="bpc">bits per component</param>
     /// <param name="data">the image data</param>
     /// <returns>an object of type ImgRaw</returns>
-    public static Image GetInstance(int width, int height, int components, int bpc, byte[] data) =>
-        GetInstance(width, height, components, bpc, data, null);
+    public static Image GetInstance(int width, int height, int components, int bpc, byte[] data)
+        => GetInstance(width, height, components, bpc, data, transparency: null);
 
     /// <summary>
     ///     Reuses an existing image.
@@ -1214,6 +1281,7 @@ public abstract class Image : Rectangle
         var height = ((PdfNumber)PdfReader.GetPdfObjectRelease(dic.Get(PdfName.Height))).IntValue;
         Image imask = null;
         var obj = dic.Get(PdfName.Smask);
+
         if (obj != null && obj.IsIndirect())
         {
             imask = GetInstance((PrIndirectReference)obj);
@@ -1221,9 +1289,11 @@ public abstract class Image : Rectangle
         else
         {
             obj = dic.Get(PdfName.Mask);
+
             if (obj != null && obj.IsIndirect())
             {
                 var obj2 = PdfReader.GetPdfObjectRelease(obj);
+
                 if (obj2 is PdfDictionary)
                 {
                     imask = GetInstance((PrIndirectReference)obj);
@@ -1231,9 +1301,10 @@ public abstract class Image : Rectangle
             }
         }
 
-        Image img = new ImgRaw(width, height, 1, 1, null);
+        Image img = new ImgRaw(width, height, components: 1, bpc: 1, data: null);
         img.imageMask = imask;
         img.DirectReference = iref;
+
         return img;
     }
 
@@ -1254,9 +1325,8 @@ public abstract class Image : Rectangle
     /// <param name="parameters"></param>
     /// <param name="data"></param>
     /// <returns></returns>
-    public static Image
-        GetInstance(int width, int height, bool reverseBits, int typeCcitt, int parameters, byte[] data) =>
-        GetInstance(width, height, reverseBits, typeCcitt, parameters, data, null);
+    public static Image GetInstance(int width, int height, bool reverseBits, int typeCcitt, int parameters, byte[] data)
+        => GetInstance(width, height, reverseBits, typeCcitt, parameters, data, transparency: null);
 
     /// <summary>
     /// </summary>
@@ -1268,16 +1338,22 @@ public abstract class Image : Rectangle
     /// <param name="data"></param>
     /// <param name="transparency"></param>
     /// <returns></returns>
-    public static Image GetInstance(int width, int height, bool reverseBits, int typeCcitt, int parameters, byte[] data,
-                                    int[] transparency)
+    public static Image GetInstance(int width,
+        int height,
+        bool reverseBits,
+        int typeCcitt,
+        int parameters,
+        byte[] data,
+        int[] transparency)
     {
         if (transparency != null && transparency.Length != 2)
         {
-            throw new BadElementException("Transparency length must be equal to 2 with CCITT images");
+            throw new BadElementException(message: "Transparency length must be equal to 2 with CCITT images");
         }
 
         Image img = new ImgCcitt(width, height, reverseBits, typeCcitt, parameters, data);
         img.transparency = transparency;
+
         return img;
     }
 
@@ -1298,17 +1374,19 @@ public abstract class Image : Rectangle
     {
         if (transparency != null && transparency.Length != components * 2)
         {
-            throw new BadElementException("Transparency length must be equal to (componentes * 2)");
+            throw new BadElementException(message: "Transparency length must be equal to (componentes * 2)");
         }
 
         if (components == 1 && bpc == 1)
         {
             var g4 = Ccittg4Encoder.Compress(data, width, height);
-            return GetInstance(width, height, false, CCITTG4, CCITT_BLACKIS1, g4, transparency);
+
+            return GetInstance(width, height, reverseBits: false, CCITTG4, CCITT_BLACKIS1, g4, transparency);
         }
 
         Image img = new ImgRaw(width, height, components, bpc, data);
         img.transparency = transparency;
+
         return img;
     }
 
@@ -1322,6 +1400,7 @@ public abstract class Image : Rectangle
     public float GetImageRotation()
     {
         var rot = (float)((RotationRadians - _initialRotation) % (2.0 * Math.PI));
+
         if (rot < 0)
         {
             rot += (float)(2.0 * Math.PI);
@@ -1403,7 +1482,7 @@ public abstract class Image : Rectangle
     {
         if (!IsMaskCandidate())
         {
-            throw new DocumentException("This image can not be an image mask.");
+            throw new DocumentException(message: "This image can not be an image mask.");
         }
 
         Mask = true;
@@ -1454,10 +1533,7 @@ public abstract class Image : Rectangle
     ///     Scale the image to a certain percentage.
     /// </summary>
     /// <param name="percent">the scaling percentage</param>
-    public void ScalePercent(float percent)
-    {
-        ScalePercent(percent, percent);
-    }
+    public void ScalePercent(float percent) => ScalePercent(percent, percent);
 
     /// <summary>
     ///     Scale the width and height of an image to a certain percentage.
@@ -1481,7 +1557,7 @@ public abstract class Image : Rectangle
     /// <param name="fitHeight">the height to fit</param>
     public void ScaleToFit(float fitWidth, float fitHeight)
     {
-        ScalePercent(100);
+        ScalePercent(percent: 100);
         var percentX = fitWidth * 100 / ScaledWidth;
         var percentY = fitHeight * 100 / ScaledHeight;
         ScalePercent(percentX < percentY ? percentX : percentY);
@@ -1523,6 +1599,7 @@ public abstract class Image : Rectangle
         }
 
         var value = Additional.GetAsArray(PdfName.Colorspace);
+
         if (value == null)
         {
             return;
@@ -1530,6 +1607,7 @@ public abstract class Image : Rectangle
 
         var cs = simplifyColorspace(value);
         PdfObject newValue;
+
         if (cs.IsName())
         {
             newValue = cs;
@@ -1537,15 +1615,17 @@ public abstract class Image : Rectangle
         else
         {
             newValue = value;
-            var first = value.GetAsName(0);
+            var first = value.GetAsName(idx: 0);
+
             if (PdfName.Indexed.Equals(first))
             {
                 if (value.Size >= 2)
                 {
-                    var second = value.GetAsArray(1);
+                    var second = value.GetAsArray(idx: 1);
+
                     if (second != null)
                     {
-                        value[1] = simplifyColorspace(second);
+                        value[idx: 1] = simplifyColorspace(second);
                     }
                 }
             }
@@ -1559,21 +1639,23 @@ public abstract class Image : Rectangle
     /// </summary>
     protected static long GetSerialId()
     {
-        lock (_serialId)
+        lock (_mutex)
         {
             _serialId = (long)_serialId + 1L;
+
             return (long)_serialId;
         }
     }
 
-    private PdfObject simplifyColorspace(PdfArray obj)
+    private static PdfObject simplifyColorspace(PdfArray obj)
     {
         if (obj == null)
         {
             return null;
         }
 
-        PdfObject first = obj.GetAsName(0);
+        PdfObject first = obj.GetAsName(idx: 0);
+
         if (PdfName.Calgray.Equals(first))
         {
             return PdfName.Devicegray;

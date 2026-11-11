@@ -9,6 +9,16 @@ namespace iTextSharp.text.xml;
 public abstract class ParserBase
 {
     /// <summary>
+    /// Secure XML reader settings that prevent XXE attacks (CVE-2017-9096)
+    /// by disabling DTD processing and external entity resolution.
+    /// </summary>
+    public static readonly XmlReaderSettings SecureXmlReaderSettings = new XmlReaderSettings
+    {
+        DtdProcessing = DtdProcessing.Prohibit,
+        XmlResolver = null
+    };
+
+    /// <summary>
     ///     This method gets called when characters are encountered.
     /// </summary>
     /// <param name="content">an array of characters</param>
@@ -26,15 +36,25 @@ public abstract class ParserBase
 
     public void Parse(XmlDocument xDoc)
     {
+        if (xDoc == null)
+        {
+            throw new ArgumentNullException(nameof(xDoc));
+        }
+
         var xml = xDoc.OuterXml;
         var stringReader = new StringReader(xml);
 
-        var reader = XmlReader.Create(stringReader);
+        var reader = XmlReader.Create(stringReader, SecureXmlReaderSettings);
         Parse(reader);
     }
 
     public void Parse(XmlReader reader)
     {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
         try
         {
             while (reader.Read())
@@ -46,6 +66,7 @@ public abstract class ParserBase
                         var name = reader.Name;
                         var isEmpty = reader.IsEmptyElement;
                         var attributes = new NullValueDictionary<string, string>();
+
                         if (reader.HasAttributes)
                         {
                             for (var i = 0; i < reader.AttributeCount; i++)
@@ -56,31 +77,34 @@ public abstract class ParserBase
                         }
 
                         StartElement(namespaceUri, name, name, attributes);
+
                         if (isEmpty)
                         {
-                            EndElement(namespaceUri,
-                                       name, name);
+                            EndElement(namespaceUri, name, name);
                         }
 
                         break;
                     case XmlNodeType.EndElement:
-                        EndElement(reader.NamespaceURI,
-                                   reader.Name, reader.Name);
+                        EndElement(reader.NamespaceURI, reader.Name, reader.Name);
+
                         break;
                     case XmlNodeType.Text:
-                        Characters(reader.Value, 0, reader.Value.Length);
+                        Characters(reader.Value, start: 0, reader.Value.Length);
+
                         break;
+
                     // There are many other types of nodes, but
                     // we are not interested in them
                     case XmlNodeType.Whitespace:
-                        Characters(reader.Value, 0, reader.Value.Length);
+                        Characters(reader.Value, start: 0, reader.Value.Length);
+
                         break;
                 }
             }
         }
-        catch (XmlException e)
+        catch (XmlException)
         {
-            Console.WriteLine(e.Message);
+            // ...
         }
         finally
         {
@@ -102,7 +126,7 @@ public abstract class ParserBase
     public void Parse(string url)
     {
         var stringReader = new StringReader(File.ReadAllText(url));
-        var reader = XmlReader.Create(stringReader);
+        var reader = XmlReader.Create(stringReader, SecureXmlReaderSettings);
         Parse(reader);
     }
 
@@ -113,6 +137,8 @@ public abstract class ParserBase
     /// <param name="lname"></param>
     /// <param name="name">the name of the tag that is encountered</param>
     /// <param name="attrs">the list of attributes</param>
-    public abstract void StartElement(string uri, string lname, string name,
-                                      INullValueDictionary<string, string> attrs);
+    public abstract void StartElement(string uri,
+        string lname,
+        string name,
+        INullValueDictionary<string, string> attrs);
 }

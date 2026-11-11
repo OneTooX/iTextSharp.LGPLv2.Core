@@ -97,7 +97,8 @@ public class Document : IDocListener
     ///     Constructs a new Document-object.
     /// </summary>
     /// <param name="pageSize">the pageSize</param>
-    public Document(Rectangle pageSize) : this(pageSize, 36, 36, 36, 36)
+    public Document(Rectangle pageSize) : this(pageSize, marginLeft: 36, marginRight: 36, marginTop: 36,
+        marginBottom: 36)
     {
     }
 
@@ -227,6 +228,7 @@ public class Document : IDocListener
         set
         {
             footer = value;
+
             foreach (var listener in _listeners)
             {
                 listener.Footer = value;
@@ -243,6 +245,7 @@ public class Document : IDocListener
         set
         {
             header = value;
+
             foreach (var listener in _listeners)
             {
                 listener.Header = value;
@@ -259,6 +262,7 @@ public class Document : IDocListener
         set
         {
             PageNumber = value;
+
             foreach (var listener in _listeners)
             {
                 listener.PageCount = value;
@@ -273,19 +277,24 @@ public class Document : IDocListener
     /// <returns>true if the element was added, false if not</returns>
     public virtual bool Add(IElement element)
     {
+        if (element == null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
         if (IsDocumentClose)
         {
-            throw new DocumentException("The document has been closed. You can't add any Elements.");
+            throw new DocumentException(message: "The document has been closed. You can't add any Elements.");
         }
 
         if (!IsDocumentOpen && element.IsContent())
         {
-            throw new DocumentException("The document is not open yet; you can only add Meta information.");
+            throw new DocumentException(message: "The document is not open yet; you can only add Meta information.");
         }
 
         var success = false;
-        var number = element as ChapterAutoNumber;
-        if (number != null)
+
+        if (element is ChapterAutoNumber number)
         {
             Chapternumber = number.SetAutomaticNumber(Chapternumber);
         }
@@ -295,10 +304,10 @@ public class Document : IDocListener
             success |= listener.Add(element);
         }
 
-        var largeElement = element as ILargeElement;
-        if (largeElement != null)
+        if (element is ILargeElement largeElement)
         {
             var e = largeElement;
+
             if (!e.ElementComplete)
             {
                 e.FlushContent();
@@ -380,6 +389,7 @@ public class Document : IDocListener
     public virtual void ResetFooter()
     {
         footer = null;
+
         foreach (var listener in _listeners)
         {
             listener.ResetFooter();
@@ -392,6 +402,7 @@ public class Document : IDocListener
     public virtual void ResetHeader()
     {
         header = null;
+
         foreach (var listener in _listeners)
         {
             listener.ResetHeader();
@@ -404,6 +415,7 @@ public class Document : IDocListener
     public virtual void ResetPageCount()
     {
         PageNumber = 0;
+
         foreach (var listener in _listeners)
         {
             listener.ResetPageCount();
@@ -420,6 +432,7 @@ public class Document : IDocListener
     public virtual bool SetMarginMirroring(bool marginMirroring)
     {
         MarginMirroring = marginMirroring;
+
         foreach (var listener in _listeners)
         {
             listener.SetMarginMirroring(marginMirroring);
@@ -439,6 +452,7 @@ public class Document : IDocListener
     public virtual bool SetMarginMirroringTopBottom(bool marginMirroringTopBottom)
     {
         MarginMirroringTopBottom = marginMirroringTopBottom;
+
         foreach (var listener in _listeners)
         {
             listener.SetMarginMirroringTopBottom(marginMirroringTopBottom);
@@ -461,6 +475,7 @@ public class Document : IDocListener
         RightMargin = marginRight;
         TopMargin = marginTop;
         BottomMargin = marginBottom;
+
         foreach (var listener in _listeners)
         {
             listener.SetMargins(marginLeft, marginRight, marginTop, marginBottom);
@@ -477,6 +492,7 @@ public class Document : IDocListener
     public virtual bool SetPageSize(Rectangle pageSize)
     {
         PageSize = pageSize;
+
         foreach (var listener in _listeners)
         {
             listener.SetPageSize(pageSize);
@@ -504,8 +520,11 @@ public class Document : IDocListener
     ///     Adds the current date and time to a Document.
     /// </summary>
     /// <returns>true if successful, false otherwise</returns>
-    public bool AddCreationDate() =>
-        Add(new Meta(Element.CREATIONDATE, DateTime.Now.ToString("ddd MMM dd HH:mm:ss zzz yyyy")));
+    public bool AddCreationDate(DateTime? dateTime = null)
+        => Add(new Meta(Element.CREATIONDATE,
+            dateTime.HasValue
+                ? dateTime.Value.ToString(format: "ddd MMM dd HH:mm:ss zzz yyyy", CultureInfo.InvariantCulture)
+                : DateTime.Now.ToString(format: "ddd MMM dd HH:mm:ss zzz yyyy", CultureInfo.InvariantCulture)));
 
     /// <summary>
     ///     Adds the creator to a Document.
@@ -518,10 +537,7 @@ public class Document : IDocListener
     ///     Adds a IDocListener to the Document.
     /// </summary>
     /// <param name="listener">the new IDocListener</param>
-    public void AddDocListener(IDocListener listener)
-    {
-        _listeners.Add(listener);
-    }
+    public void AddDocListener(IDocListener listener) => _listeners.Add(listener);
 
     /// <summary>
     ///     Adds a user defined header to the document.
@@ -542,7 +558,7 @@ public class Document : IDocListener
     ///     Adds the producer to a Document.
     /// </summary>
     /// <returns>true if successful, false otherwise</returns>
-    public bool AddProducer() => Add(new Meta(Element.PRODUCER, Version));
+    public bool AddProducer(string producer = null) => Add(new Meta(Element.PRODUCER, producer ?? Version));
 
     /// <summary>
     ///     Adds the subject to a Document.
@@ -605,8 +621,5 @@ public class Document : IDocListener
     ///     Removes a IDocListener from the Document.
     /// </summary>
     /// <param name="listener">the IDocListener that has to be removed.</param>
-    public void RemoveIDocListener(IDocListener listener)
-    {
-        _listeners.Remove(listener);
-    }
+    public void RemoveIDocListener(IDocListener listener) => _listeners.Remove(listener);
 }

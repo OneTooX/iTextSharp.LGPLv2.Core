@@ -14,16 +14,21 @@ public class StringTokenizer
     private string _delim;
     private int _pos;
 
-    public StringTokenizer(string str) : this(str, " \t\n\r\f", false)
+    public StringTokenizer(string str) : this(str, delim: " \t\n\r\f", retDelims: false)
     {
     }
 
-    public StringTokenizer(string str, string delim) : this(str, delim, false)
+    public StringTokenizer(string str, string delim) : this(str, delim, retDelims: false)
     {
     }
 
     public StringTokenizer(string str, string delim, bool retDelims)
     {
+        if (str == null)
+        {
+            throw new ArgumentNullException(nameof(str));
+        }
+
         _len = str.Length;
         _str = str;
         _delim = delim;
@@ -53,8 +58,8 @@ public class StringTokenizer
             else
             {
                 tokenFound = true;
-                while (tmpPos < _len
-                       && _delim.IndexOf(_str[tmpPos].ToString(), StringComparison.Ordinal) < 0)
+
+                while (tmpPos < _len && _delim.IndexOf(_str[tmpPos].ToString(), StringComparison.Ordinal) < 0)
                 {
                     ++tmpPos;
                 }
@@ -85,6 +90,7 @@ public class StringTokenizer
     public string NextToken(string delim)
     {
         _delim = delim;
+
         return NextToken();
     }
 
@@ -94,7 +100,7 @@ public class StringTokenizer
         {
             if (_retDelims)
             {
-                return _str.Substring(_pos++, 1);
+                return _str.Substring(_pos++, length: 1);
             }
 
             while (++_pos < _len && _delim.IndexOf(_str[_pos].ToString(), StringComparison.Ordinal) >= 0)
@@ -106,6 +112,7 @@ public class StringTokenizer
         if (_pos < _len)
         {
             var start = _pos;
+
             while (++_pos < _len && _delim.IndexOf(_str[_pos].ToString(), StringComparison.Ordinal) < 0)
             {
                 ;
@@ -114,6 +121,6 @@ public class StringTokenizer
             return _str.Substring(start, _pos - start);
         }
 
-        throw new IndexOutOfRangeException();
+        throw new InvalidOperationException(message: "Failed to get NextToken");
     }
 }

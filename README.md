@@ -1,11 +1,7 @@
 iTextSharp.LGPLv2.Core
 ======================
 
-<p align="left">
-  <a href="https://github.com/VahidN/iTextSharp.LGPLv2.Core">
-     <img alt="GitHub Actions status" src="https://github.com/VahidN/iTextSharp.LGPLv2.Core/workflows/.NET%20Core%20Build/badge.svg">
-  </a>
-</p>
+[![iTextSharp.LGPLv2.Core](https://github.com/VahidN/iTextSharp.LGPLv2.Core/workflows/.NET%20Core%20Build/badge.svg)](https://github.com/VahidN/iTextSharp.LGPLv2.Core)
 
 `iTextSharp.LGPLv2.Core` is an **unofficial** port of the last [LGPL version](http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html) of the [iTextSharp (V4.1.6)](https://github.com/itextsharper/iTextSharp-4.1.6) to .NET Core.
 
@@ -14,7 +10,7 @@ Install via NuGet
 -----------------
 To install iTextSharp.LGPLv2.Core, run the following command in the Package Manager Console:
 
-[![Nuget](https://img.shields.io/nuget/v/iTextSharp.LGPLv2.Core)](https://github.com/VahidN/iTextSharp.LGPLv2.Core)
+[![Nuget](https://img.shields.io/nuget/v/iTextSharp.LGPLv2.Core)](http://www.nuget.org/packages/iTextSharp.LGPLv2.Core/) [![NuGet](https://img.shields.io/nuget/dt/iTextSharp.LGPLv2.Core?logo=nuget&style=flat)](https://www.nuget.org/packages/iTextSharp.LGPLv2.Core)
 ```
 PM> Install-Package iTextSharp.LGPLv2.Core
 ```
@@ -28,21 +24,19 @@ The `SkiaSharp` library needs extra dependencies to work on Linux and containers
 
 ```
 PM> Install-Package SkiaSharp.NativeAssets.Linux.NoDependencies
-PM> Install-Package HarfBuzzSharp.NativeAssets.Linux
 ```
 
 You also need to modify your `.csproj` file to include some MSBuild directives that ensure the required files are in a good place. These extra steps are normally not required but seems to be some issues on how .NET loads them.
 
 ```xml
 <Target Name="CopyFilesAfterPublish" AfterTargets="AfterPublish">
-    <Copy SourceFiles="$(TargetDir)runtimes/linux-x64/native/libSkiaSharp.so" DestinationFolder="$([System.IO.Path]::GetFullPath('$(PublishDir)'))/bin/" />
-    <Copy SourceFiles="$(TargetDir)runtimes/linux-x64/native/libHarfBuzzSharp.so" DestinationFolder="$([System.IO.Path]::GetFullPath('$(PublishDir)'))/bin/" />    
+    <Copy SourceFiles="$(TargetDir)runtimes/linux-x64/native/libSkiaSharp.so" DestinationFolder="$([System.IO.Path]::GetFullPath('$(PublishDir)'))/bin/" />    
 </Target>
 ```
 
 Usage
 ------
-[Functional Tests](/src/iTextSharp.LGPLv2.Core.FunctionalTests)
+[Functional Tests](https://github.com/VahidN/iTextSharp.LGPLv2.Core/tree/master/src/iTextSharp.LGPLv2.Core.FunctionalTests)
 
 
 FAQ
@@ -72,3 +66,4 @@ Licensing
 You have three license choices when it comes to iTextSharp: LGPL/MPL, AGPL, or a commercial license. The LGPL/MPL license is only an option with the older 4.1.6 version (used here). After that version, they switched to a dual AGPL/Commercial.
 
 If you need a more recent version, you either have to make your project open-source or pay the license fee.
+

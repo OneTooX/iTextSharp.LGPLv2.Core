@@ -6,13 +6,14 @@ namespace iTextSharp.text.pdf;
 ///     Creates a name tree.
 ///     @author Paulo Soares (psoares@consiste.pt)
 /// </summary>
-public class PdfNameTree
+public static class PdfNameTree
 {
     private const int LeafSize = 64;
 
     public static INullValueDictionary<string, PdfObject> ReadTree(PdfDictionary dic)
     {
         var items = new NullValueDictionary<string, PdfObject>();
+
         if (dic != null)
         {
             iterateItems(dic, items);
@@ -35,43 +36,58 @@ public class PdfNameTree
     /// <returns>the dictionary with the name tree. This dictionary is the one</returns>
     public static PdfDictionary WriteTree(INullValueDictionary<string, PdfObject> items, PdfWriter writer)
     {
+        if (items == null)
+        {
+            throw new ArgumentNullException(nameof(items));
+        }
+
+        if (writer == null)
+        {
+            throw new ArgumentNullException(nameof(writer));
+        }
+
         if (items.Count == 0)
         {
             return null;
         }
 
         var names = new string[items.Count];
-        items.Keys.CopyTo(names, 0);
-        Array.Sort(names);
+        items.Keys.CopyTo(names, arrayIndex: 0);
+        Array.Sort(names, StringComparer.Ordinal);
+
         if (names.Length <= LeafSize)
         {
             var dic = new PdfDictionary();
             var ar = new PdfArray();
+
             for (var k = 0; k < names.Length; ++k)
             {
-                ar.Add(new PdfString(names[k], null));
+                ar.Add(new PdfString(names[k], encoding: null));
                 ar.Add(items[names[k]]);
             }
 
             dic.Put(PdfName.Names, ar);
+
             return dic;
         }
 
         var skip = LeafSize;
         var kids = new PdfIndirectReference[(names.Length + LeafSize - 1) / LeafSize];
+
         for (var k = 0; k < kids.Length; ++k)
         {
             var offset = k * LeafSize;
             var end = Math.Min(offset + LeafSize, names.Length);
             var dic = new PdfDictionary();
             var arr = new PdfArray();
-            arr.Add(new PdfString(names[offset], null));
-            arr.Add(new PdfString(names[end - 1], null));
+            arr.Add(new PdfString(names[offset], encoding: null));
+            arr.Add(new PdfString(names[end - 1], encoding: null));
             dic.Put(PdfName.Limits, arr);
             arr = new PdfArray();
+
             for (; offset < end; ++offset)
             {
-                arr.Add(new PdfString(names[offset], null));
+                arr.Add(new PdfString(names[offset], encoding: null));
                 arr.Add(items[names[offset]]);
             }
 
@@ -80,11 +96,13 @@ public class PdfNameTree
         }
 
         var top = kids.Length;
+
         while (true)
         {
             if (top <= LeafSize)
             {
                 var arr = new PdfArray();
+
                 for (var k = 0; k < top; ++k)
                 {
                     arr.Add(kids[k]);
@@ -92,21 +110,24 @@ public class PdfNameTree
 
                 var dic = new PdfDictionary();
                 dic.Put(PdfName.Kids, arr);
+
                 return dic;
             }
 
             skip *= LeafSize;
             var tt = (names.Length + skip - 1) / skip;
+
             for (var k = 0; k < tt; ++k)
             {
                 var offset = k * LeafSize;
                 var end = Math.Min(offset + LeafSize, top);
                 var dic = new PdfDictionary();
                 var arr = new PdfArray();
-                arr.Add(new PdfString(names[k * skip], null));
-                arr.Add(new PdfString(names[Math.Min((k + 1) * skip, names.Length) - 1], null));
+                arr.Add(new PdfString(names[k * skip], encoding: null));
+                arr.Add(new PdfString(names[Math.Min((k + 1) * skip, names.Length) - 1], encoding: null));
                 dic.Put(PdfName.Limits, arr);
                 arr = new PdfArray();
+
                 for (; offset < end; ++offset)
                 {
                     arr.Add(kids[offset]);
@@ -123,12 +144,13 @@ public class PdfNameTree
     private static void iterateItems(PdfDictionary dic, INullValueDictionary<string, PdfObject> items)
     {
         var nn = (PdfArray)PdfReader.GetPdfObjectRelease(dic.Get(PdfName.Names));
+
         if (nn != null)
         {
             for (var k = 0; k < nn.Size; ++k)
             {
                 var s = (PdfString)PdfReader.GetPdfObjectRelease(nn[k++]);
-                items[PdfEncodings.ConvertToString(s.GetBytes(), null)] = nn[k];
+                items[PdfEncodings.ConvertToString(s.GetBytes(), encoding: null)] = nn[k];
             }
         }
         else if ((nn = (PdfArray)PdfReader.GetPdfObjectRelease(dic.Get(PdfName.Kids))) != null)
