@@ -1368,13 +1368,49 @@ public sealed class Deflate
         }
 
         // Deallocate in reverse order of allocations:
+        Return(ref _cachedPendingBuf, PendingBuf);
         PendingBuf = null;
+        Return(ref _cachedHead, Head);
         Head = null;
+        Return(ref _cachedPrev, Prev);
         Prev = null;
+        Return(ref _cachedWindow, Window);
         Window = null;
         // free
         // dstate=null;
         return Status == BusyState ? ZDataError : ZOk;
+    }
+
+    // OneTooX: one set of buffers for each thread, for the next deflater on that thread. The
+    // buffers are approximately 260 KB, and PdfStamper makes a deflater for each page that gets
+    // over or under content: 530 MB for an overlay on 2,000 pages. A deflater that ends returns its
+    // buffers, and the next one clears them, so that it starts as with new arrays.
+    [ThreadStatic] private static byte[] _cachedWindow;
+    [ThreadStatic] private static short[] _cachedPrev;
+    [ThreadStatic] private static short[] _cachedHead;
+    [ThreadStatic] private static byte[] _cachedPendingBuf;
+
+    private static T[] Rent<T>(ref T[] cache, int length)
+    {
+        var buffer = cache;
+
+        if (buffer == null || buffer.Length != length)
+        {
+            return new T[length];
+        }
+
+        cache = null;
+        Array.Clear(buffer, 0, buffer.Length);
+
+        return buffer;
+    }
+
+    private static void Return<T>(ref T[] cache, T[] buffer)
+    {
+        if (buffer != null && cache == null)
+        {
+            cache = buffer;
+        }
     }
 
     internal int DeflateInit(ZStream strm, int level, int bits) =>
@@ -1429,15 +1465,15 @@ public sealed class Deflate
         HashMask = HashSize - 1;
         HashShift = (HashBits + MinMatch - 1) / MinMatch;
 
-        Window = new byte[WSize * 2];
-        Prev = new short[WSize];
-        Head = new short[HashSize];
+        Window = Rent(ref _cachedWindow, WSize * 2);
+        Prev = Rent(ref _cachedPrev, WSize);
+        Head = Rent(ref _cachedHead, HashSize);
 
         LitBufsize = 1 << (memLevel + 6); // 16K elements by default
 
         // We overlay pending_buf and d_buf+l_buf. This works since the average
         // output size for (length,distance) codes is <= 24 bits.
-        PendingBuf = new byte[LitBufsize * 4];
+        PendingBuf = Rent(ref _cachedPendingBuf, LitBufsize * 4);
         PendingBufSize = LitBufsize * 4;
 
         DBuf = LitBufsize / 2;

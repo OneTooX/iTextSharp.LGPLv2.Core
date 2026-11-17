@@ -200,6 +200,8 @@ public class PdfStream : PdfDictionary
 
         //zip.Close();
         zip.Finish();
+        // OneTooX: End gives the buffers of the deflater back for the next stream (see Deflate.Rent).
+        zip.End();
 
         // update the object
         StreamBytes = stream;
