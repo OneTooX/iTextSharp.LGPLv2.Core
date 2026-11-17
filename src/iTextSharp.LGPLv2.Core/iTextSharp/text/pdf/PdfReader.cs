@@ -3749,11 +3749,11 @@ public class PdfReader : IPdfViewerPreferences, IDisposable
 
             for (var k = start; k < end; ++k)
             {
-                Tokens.NextValidToken();
+                nextXrefEntryToken();
                 pos = Tokens.IntValue;
-                Tokens.NextValidToken();
+                nextXrefEntryToken();
                 gen = Tokens.IntValue;
-                Tokens.NextValidToken();
+                nextXrefEntryToken();
                 var p = k * 2;
 
                 if (Tokens.StringValue.Equals(value: "n", StringComparison.Ordinal))
@@ -4371,6 +4371,15 @@ public class PdfReader : IPdfViewerPreferences, IDisposable
         }
 
         stream.Length = streamLength;
+    }
+
+    // OneTooX: an xref entry is "offset generation n|f" and holds no reference, so the look-ahead
+    // of NextValidToken for "n g R" is not needed. It read each entry six times instead of three.
+    private void nextXrefEntryToken()
+    {
+        while (Tokens.NextToken() && Tokens.TokenType == PrTokeniser.TK_COMMENT)
+        {
+        }
     }
 
     private void ensureXrefSize(int size)

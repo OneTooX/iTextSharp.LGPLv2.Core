@@ -27,6 +27,11 @@ public class PrTokeniser
     protected string stringValue;
     protected int Type;
 
+    // OneTooX: one buffer for all tokens. A new StringBuilder for each token was most of what a
+    // partial PdfReader allocates: the xref of a PDF with 26,000 objects cost 20 MB.
+    private const int MaxReusedOutBufCapacity = 1024;
+    private StringBuilder _outBuf;
+
     public PrTokeniser(string filename) => file = new RandomAccessFileOrArray(filename);
 
     public PrTokeniser(byte[] pdfIn) => file = new RandomAccessFileOrArray(pdfIn);
@@ -187,6 +192,21 @@ public class PrTokeniser
 
     public bool IsHexString() => HexString;
 
+    // OneTooX: a buffer that grew for a long string is not kept, so that the tokeniser does not hold it.
+    private StringBuilder ReuseOutBuf()
+    {
+        if (_outBuf == null || _outBuf.Capacity > MaxReusedOutBufCapacity)
+        {
+            _outBuf = new StringBuilder();
+        }
+        else
+        {
+            _outBuf.Clear();
+        }
+
+        return _outBuf;
+    }
+
     public bool NextToken()
     {
         var ch = 0;
@@ -215,7 +235,7 @@ public class PrTokeniser
                 break;
             case '/':
             {
-                outBuf = new StringBuilder();
+                outBuf = ReuseOutBuf();
                 Type = TK_NAME;
                 while (true)
                 {
@@ -254,7 +274,7 @@ public class PrTokeniser
                     break;
                 }
 
-                outBuf = new StringBuilder();
+                outBuf = ReuseOutBuf();
                 Type = TK_STRING;
                 HexString = true;
                 var v2 = 0;
@@ -317,7 +337,7 @@ public class PrTokeniser
                 break;
             case '(':
             {
-                outBuf = new StringBuilder();
+                outBuf = ReuseOutBuf();
                 Type = TK_STRING;
                 HexString = false;
                 var nesting = 0;
@@ -447,7 +467,7 @@ public class PrTokeniser
             }
             default:
             {
-                outBuf = new StringBuilder();
+                outBuf = ReuseOutBuf();
                 if (ch == '-' || ch == '+' || ch == '.' || (ch >= '0' && ch <= '9'))
                 {
                     Type = TK_NUMBER;
